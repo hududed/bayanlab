@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # Placekey
     placekey_api_key: str | None = None
 
+    # Google Calendar API
+    google_application_credentials: str | None = None
+
     # Region (default for V1)
     default_region: str = "CO"
 

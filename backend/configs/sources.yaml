@@ -1,23 +1,34 @@
 # sources.yaml
 # Data source configurations for Colorado
+#
+# ICS Sources support two methods:
+# 1. Public ICS URL (url field)
+# 2. Google Calendar API (calendar_id field - requires service account setup)
+#
+# Priority: If both calendar_id and url are provided, calendar_id is used (better reliability)
 
 ics_sources:
+  # Example: Using Google Calendar API (preferred for shared calendars)
   - id: "foco_icfc_volunteering"
-    url: "https://calendar.google.com/calendar/ical/volunteering%40icfc.org/public/basic.ics"
+    calendar_id: "volunteering@icfc.org"  # Share this calendar with bayanlab-calendar@bayanlab-477720.iam.gserviceaccount.com
+    url: "https://calendar.google.com/calendar/ical/volunteering%40icfc.org/public/basic.ics"  # Fallback if API not configured
     venue_name: "Islamic Center Fort Collins Volunteering"
     city: "Fort Collins"
-    enabled: true 
+    enabled: true
+
+  # Example: Using public ICS URL only
   - id: "denver_masjid_sample"
     url: "https://calendar.google.com/calendar/ical/sample_denver/public/basic.ics"
     venue_name: "Denver Islamic Society"
     city: "Denver"
     enabled: true
 
+  # Example: Calendar API only (private calendar shared with service account)
   - id: "springs_islamic_center"
-    url: "https://calendar.google.com/calendar/ical/sample_cosprings/public/basic.ics"
+    calendar_id: "sample_cosprings@example.com"
     venue_name: "Islamic Center of Colorado Springs"
     city: "Colorado Springs"
-    enabled: true
+    enabled: false  # Set to true once calendar is shared with service account
 
 csv_sources:
   events:

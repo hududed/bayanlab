@@ -23,6 +23,9 @@ dependencies = [
     "python-dateutil>=2.8.2",
     "pytz>=2023.3",
     "slowapi>=0.1.9",
+    "google-auth>=2.27.0",
+    "google-auth-oauthlib>=1.2.0",
+    "google-api-python-client>=2.116.0",
 ]
 
 [project.optional-dependencies]
