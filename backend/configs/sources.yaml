@@ -1,0 +1,79 @@
+# sources.yaml
+# Data source configurations for Colorado
+
+ics_sources:
+  - id: "foco_icfc_volunteering"
+    url: "https://calendar.google.com/calendar/ical/volunteering%40icfc.org/public/basic.ics"
+    venue_name: "Islamic Center Fort Collins Volunteering"
+    city: "Fort Collins"
+    enabled: true 
+  - id: "denver_masjid_sample"
+    url: "https://calendar.google.com/calendar/ical/sample_denver/public/basic.ics"
+    venue_name: "Denver Islamic Society"
+    city: "Denver"
+    enabled: true
+
+  - id: "springs_islamic_center"
+    url: "https://calendar.google.com/calendar/ical/sample_cosprings/public/basic.ics"
+    venue_name: "Islamic Center of Colorado Springs"
+    city: "Colorado Springs"
+    enabled: true
+
+csv_sources:
+  events:
+    - path: "events.csv"
+      enabled: true
+
+  businesses:
+    - path: "businesses.csv"
+      enabled: true
+
+# OSM Overpass queries for halal businesses
+osm_queries:
+  - id: "halal_restaurants_denver_metro"
+    region: "CO"
+    metro: "Denver"
+    bbox: [-105.1099, 39.6144, -104.6002, 39.9142]  # Denver metro area
+    query_template: |
+      [out:json][timeout:25];
+      (
+        node["cuisine"="halal"]({{bbox}});
+        way["cuisine"="halal"]({{bbox}});
+        node["diet:halal"="yes"]({{bbox}});
+        way["diet:halal"="yes"]({{bbox}});
+        node["name"~"Halal",i]({{bbox}});
+        way["name"~"Halal",i]({{bbox}});
+      );
+      out body;
+      >;
+      out skel qt;
+
+  - id: "halal_restaurants_colorado_springs"
+    region: "CO"
+    metro: "Colorado Springs"
+    bbox: [-104.9494, 38.7666, -104.6002, 38.9536]
+    query_template: |
+      [out:json][timeout:25];
+      (
+        node["cuisine"="halal"]({{bbox}});
+        way["cuisine"="halal"]({{bbox}});
+        node["diet:halal"="yes"]({{bbox}});
+        way["diet:halal"="yes"]({{bbox}});
+      );
+      out body;
+      >;
+      out skel qt;
+
+# Halal certifier feeds
+certifier_feeds:
+  - id: "isna_halal_colorado"
+    name: "ISNA Halal Certification"
+    source: "certifier"
+    path: "certifiers/isna_co.csv"
+    enabled: true
+
+  - id: "ifanca_colorado"
+    name: "IFANCA"
+    source: "certifier"
+    path: "certifiers/ifanca_co.csv"
+    enabled: false  # placeholder for future

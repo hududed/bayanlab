@@ -1,0 +1,47 @@
+# regions.yaml
+# Colorado region configuration
+
+regions:
+  CO:
+    name: "Colorado"
+    bbox:
+      # Colorado bounding box: [west, south, east, north]
+      west: -109.060253
+      south: 36.992426
+      east: -102.041524
+      north: 41.003444
+    timezone: "America/Denver"
+    state_code: "CO"
+
+    # Major cities and aliases
+    cities:
+      - name: "Denver"
+        aliases: ["Denver City", "DEN"]
+      - name: "Colorado Springs"
+        aliases: ["Colo Springs", "COS"]
+      - name: "Aurora"
+        aliases: []
+      - name: "Fort Collins"
+        aliases: ["Ft Collins", "FoCo"]
+      - name: "Lakewood"
+        aliases: []
+      - name: "Thornton"
+        aliases: []
+      - name: "Arvada"
+        aliases: []
+      - name: "Westminster"
+        aliases: []
+      - name: "Pueblo"
+        aliases: []
+      - name: "Centennial"
+        aliases: []
+      - name: "Boulder"
+        aliases: []
+      - name: "Greeley"
+        aliases: []
+      - name: "Longmont"
+        aliases: []
+      - name: "Loveland"
+        aliases: []
+      - name: "Grand Junction"
+        aliases: []

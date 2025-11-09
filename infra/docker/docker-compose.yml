@@ -1,0 +1,59 @@
+services:
+  # PostgreSQL with PostGIS
+  db:
+    image: postgis/postgis:15-3.3
+    platform: linux/arm64
+    environment:
+      POSTGRES_DB: bayan_backbone
+      POSTGRES_USER: bayan
+      POSTGRES_PASSWORD: bayan
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../../../backend/sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bayan"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API Service
+  api:
+    build:
+      context: ../../..
+      dockerfile: infra/docker/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://bayan:bayan@db:5432/bayan_backbone"
+      DATABASE_URL_SYNC: "postgresql://bayan:bayan@db:5432/bayan_backbone"
+      API_HOST: "0.0.0.0"
+      API_PORT: "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ../../../backend:/app/backend
+      - ../../../exports:/app/exports
+    command: ["uvicorn", "backend.services.api_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  # Pipeline Runner (one-shot for initial setup)
+  pipeline:
+    build:
+      context: ../../..
+      dockerfile: infra/docker/Dockerfile
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://bayan:bayan@db:5432/bayan_backbone"
+      DATABASE_URL_SYNC: "postgresql://bayan:bayan@db:5432/bayan_backbone"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ../../../backend:/app/backend
+      - ../../../exports:/app/exports
+    command: ["python", "-m", "backend.services.pipeline_runner", "--pipeline", "all"]
+    restart: "no"
+
+volumes:
+  postgres_data:

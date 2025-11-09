@@ -1,0 +1,6 @@
+id,name,category,address_street,address_city,address_state,address_zip,latitude,longitude,website,phone,email,self_identified_muslim_owned,halal_certified,certifier_name,certifier_ref
+biz001,Zabiha Halal Market,grocery,1200 S Parker Rd,Denver,CO,80231,39.6934,-104.8932,https://example.com/zabiha,303-555-0100,info@example.com,true,true,ISNA,ISNA-CO-001
+biz002,Mediterranean Grill,restaurant,500 16th St Mall,Denver,CO,80202,39.7472,-104.9963,https://example.com/medgrill,303-555-0200,,false,true,IFANCA,IFANCA-CO-002
+biz003,Crescent Moon Cafe,restaurant,1500 Pearl St,Boulder,CO,80302,40.0188,-105.2724,https://example.com/crescent,303-555-0300,contact@example.com,true,false,,
+biz004,Salam Halal Butcher,butcher,2300 S Broadway,Denver,CO,80210,39.6789,-104.9881,,,true,true,ISNA,ISNA-CO-003
+biz005,Al-Noor Bookstore,retail,400 E Bijou St,Colorado Springs,CO,80903,38.8325,-104.8184,https://example.com/alnoor,719-555-0400,,true,false,,

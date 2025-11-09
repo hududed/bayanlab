@@ -1,0 +1,108 @@
+# dq_rules.yaml
+# Data quality rules for validation
+
+events:
+  required_fields:
+    - title
+    - start_time
+    - end_time
+    - address_city
+    - address_state
+
+  validations:
+    - rule: "start_time_before_end_time"
+      description: "Event start must be before end time"
+      severity: "error"
+
+    - rule: "start_time_not_too_old"
+      description: "Event start must not be more than 30 days in the past"
+      severity: "warning"
+      params:
+        days_threshold: 30
+
+    - rule: "region_must_be_co"
+      description: "Region must be CO"
+      severity: "error"
+
+    - rule: "state_must_be_co"
+      description: "State must be CO"
+      severity: "error"
+
+    - rule: "coords_in_colorado_bbox"
+      description: "If coordinates present, must be inside Colorado bounding box"
+      severity: "error"
+      params:
+        bbox:
+          west: -109.060253
+          south: 36.992426
+          east: -102.041524
+          north: 41.003444
+
+    - rule: "valid_iso_datetime"
+      description: "Start and end times must be valid ISO 8601 datetime strings"
+      severity: "error"
+
+    - rule: "url_format_valid"
+      description: "URL must be valid format if present"
+      severity: "warning"
+
+businesses:
+  required_fields:
+    - name
+    - category
+    - address_city
+    - address_state
+
+  validations:
+    - rule: "valid_category"
+      description: "Category must be one of: restaurant, service, retail, grocery, butcher, other"
+      severity: "error"
+      params:
+        allowed_categories:
+          - restaurant
+          - service
+          - retail
+          - grocery
+          - butcher
+          - other
+
+    - rule: "region_must_be_co"
+      description: "Region must be CO"
+      severity: "error"
+
+    - rule: "state_must_be_co"
+      description: "State must be CO"
+      severity: "error"
+
+    - rule: "coords_in_colorado_bbox"
+      description: "If coordinates present, must be inside Colorado bounding box"
+      severity: "error"
+      params:
+        bbox:
+          west: -109.060253
+          south: 36.992426
+          east: -102.041524
+          north: 41.003444
+
+    - rule: "url_format_valid"
+      description: "Website URL must be valid format if present"
+      severity: "warning"
+
+    - rule: "phone_format_valid"
+      description: "Phone must match valid format if present"
+      severity: "warning"
+      params:
+        regex: "^\\+?1?[-.]?\\(?([0-9]{3})\\)?[-.]?([0-9]{3})[-.]?([0-9]{4})$"
+
+    - rule: "email_format_valid"
+      description: "Email must be valid format if present"
+      severity: "warning"
+
+    - rule: "no_duplicate_ids"
+      description: "No duplicate business_id in canonical table"
+      severity: "error"
+
+pipeline:
+  fail_on_error: true
+  fail_on_warning: false
+  max_error_percentage: 5  # Fail if more than 5% of records have errors

@@ -1,0 +1,6 @@
+id,title,description,start_time,end_time,all_day,venue_name,address_street,address_city,address_state,address_zip,latitude,longitude,url,organizer_name,organizer_contact
+evt001,Jumu'ah Prayer,Weekly Friday congregational prayer,2025-11-14T13:30:00-07:00,2025-11-14T14:00:00-07:00,false,Islamic Center of Denver,123 Main St,Denver,CO,80202,39.7392,-104.9903,https://example.com/jumah,Denver Islamic Society,info@example.com
+evt002,Eid al-Fitr Prayer,Eid celebration and prayer,2025-04-10T08:00:00-06:00,2025-04-10T10:00:00-06:00,false,Colorado Convention Center,700 14th St,Denver,CO,80202,39.7435,-104.9954,https://example.com/eid,Colorado Muslim Council,contact@example.com
+evt003,Quran Study Circle,Weekly Quran study and discussion,2025-11-15T19:00:00-07:00,2025-11-15T20:30:00-07:00,false,Aurora Masjid,456 Oak Ave,Aurora,CO,80010,39.7294,-104.8319,,,
+evt004,Youth Basketball,Basketball program for Muslim youth,2025-11-16T18:00:00-07:00,2025-11-16T20:00:00-07:00,false,Boulder Islamic Center,789 Spruce St,Boulder,CO,80301,40.0150,-105.2705,https://example.com/youth,,
+evt005,Ramadan Iftar,Community iftar dinner,2025-03-15T19:30:00-06:00,2025-03-15T21:00:00-06:00,false,Colorado Springs Masjid,321 Pine Rd,Colorado Springs,CO,80903,38.8339,-104.8214,,,
