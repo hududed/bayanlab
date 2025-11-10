@@ -8,13 +8,20 @@
 # Priority: If both calendar_id and url are provided, calendar_id is used (better reliability)
 
 ics_sources:
-  # Example: Using Google Calendar API (preferred for shared calendars)
-  - id: "foco_icfc_volunteering"
-    calendar_id: "volunteering@icfc.org"  # Share this calendar with bayanlab-calendar@bayanlab-477720.iam.gserviceaccount.com
-    url: "https://calendar.google.com/calendar/ical/volunteering%40icfc.org/public/basic.ics"  # Fallback if API not configured
-    venue_name: "Islamic Center Fort Collins Volunteering"
+  # TESTING: Personal test calendar to verify Calendar API works
+  - id: "test_calendar"
+    calendar_id: "PASTE_YOUR_CALENDAR_ID_HERE@group.calendar.google.com"  # Replace with your test calendar ID
+    venue_name: "Test Calendar"
     city: "Fort Collins"
     enabled: true
+
+  # PRODUCTION: ICFC calendar (Calendar API blocked by org policy)
+  - id: "foco_icfc_volunteering"
+    # calendar_id: "volunteering@icfc.org"  # Disabled: org policy prevents "See all event details" sharing
+    url: "https://calendar.google.com/calendar/ical/volunteering%40icfc.org/public/basic.ics"  # Returns 404 (calendar is private)
+    venue_name: "Islamic Center Fort Collins Volunteering"
+    city: "Fort Collins"
+    enabled: false  # Disabled until permission issue resolved
 
   # Example: Using public ICS URL only
   - id: "denver_masjid_sample"
@@ -28,7 +35,7 @@ ics_sources:
     calendar_id: "sample_cosprings@example.com"
     venue_name: "Islamic Center of Colorado Springs"
     city: "Colorado Springs"
-    enabled: false  # Set to true once calendar is shared with service account
+    enabled: false  # Set to true once calendar is shared with sDenverervice account
 
 csv_sources:
   events:

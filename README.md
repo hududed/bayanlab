@@ -4,6 +4,19 @@
 
 A scalable data backbone for Muslim community events and halal businesses, starting with Colorado and designed for nationwide and international expansion.
 
+---
+
+**📚 Documentation Map:**
+[Quick Start](QUICKSTART.md) •
+[Setup](docs/setup.md) •
+[Roadmap](docs/roadmap.md) •
+[Decisions](docs/decisions.md) •
+[Troubleshooting](docs/troubleshooting.md) •
+[Contributing](CONTRIBUTING.md) •
+[Changelog](CHANGELOG.md)
+
+---
+
 ## Features
 
 - **Events Pipeline**: Ingest from Google Calendar/ICS feeds and CSV
@@ -67,9 +80,25 @@ bayanlab/
 
 ## Documentation
 
-- **[Setup Guide](docs/README.md)** - Detailed installation and configuration
-- **[Local Development](docs/LOCAL_DEVELOPMENT.md)** - Development workflow
-- **[API Reference](http://localhost:8000/docs)** - Interactive API docs (when running)
+### Getting Started
+- **[QUICKSTART.md](QUICKSTART.md)** - 5-minute setup
+- **[docs/setup.md](docs/setup.md)** - Complete setup & development guide
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - How to contribute (internal team only)
+
+### Core Docs
+- **[docs/roadmap.md](docs/roadmap.md)** - Product vision & current sprint
+- **[docs/decisions.md](docs/decisions.md)** - Architectural Decision Records (ADRs)
+- **[docs/troubleshooting.md](docs/troubleshooting.md)** - Common issues & solutions
+
+### Reference
+- **[CHANGELOG.md](CHANGELOG.md)** - Release history
+- **[QA_CHECKLIST.md](QA_CHECKLIST.md)** - Validation checklist
+- **[backend/sql/views.md](backend/sql/views.md)** - Database views & queries
+- **[API Docs](http://localhost:8000/docs)** - Interactive OpenAPI docs (when running)
+
+### Onboarding
+- **[docs/google-calendar.md](docs/GOOGLE_CALENDAR_SETUP.md)** - Setup Google Calendar API
+- **[docs/masjid-onboarding.md](docs/MASJID_ONBOARDING.md)** - Share your calendar with BayanLab
 
 ## Tech Stack
 
