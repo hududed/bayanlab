@@ -1,7 +1,7 @@
 """
 FastAPI service for BayanLab Community Data Backbone
 """
-from fastapi import FastAPI, Depends, Query, HTTPException
+from fastapi import FastAPI, Depends, Query, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -10,7 +10,7 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import uvicorn
 
 from ..common.database import get_db
@@ -47,16 +47,102 @@ app.add_middleware(
 
 
 @app.get("/healthz")
-@limiter.limit("100/minute")
-async def healthz(request):
-    """Health check endpoint"""
-    return {"status": "healthy", "service": "bayan_backbone_api"}
+async def healthz(db: AsyncSession = Depends(get_db)):
+    """
+    Health check endpoint with database connectivity test
+    Returns 200 if healthy, 503 if unhealthy
+    """
+    try:
+        # Check database connectivity
+        result = await db.execute(text("SELECT 1"))
+        result.scalar()
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "healthy",
+                "service": "bayan_backbone_api",
+                "version": "1.0.0",
+                "database": "connected",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        )
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "service": "bayan_backbone_api",
+                "database": "disconnected",
+                "error": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        )
+
+
+@app.get("/metrics")
+async def metrics(db: AsyncSession = Depends(get_db)):
+    """
+    Prometheus-compatible metrics endpoint
+    Returns metrics in Prometheus text format
+    """
+    try:
+        # Query database metrics
+        events_result = await db.execute(text("SELECT COUNT(*) FROM event_canonical"))
+        businesses_result = await db.execute(text("SELECT COUNT(*) FROM business_canonical"))
+        events_by_region = await db.execute(text("""
+            SELECT region, COUNT(*) FROM event_canonical GROUP BY region
+        """))
+        businesses_by_region = await db.execute(text("""
+            SELECT region, COUNT(*) FROM business_canonical GROUP BY region
+        """))
+
+        events_count = events_result.scalar() or 0
+        businesses_count = businesses_result.scalar() or 0
+
+        # Build Prometheus metrics format
+        metrics_text = f"""# HELP bayanlab_events_total Total number of events in database
+# TYPE bayanlab_events_total gauge
+bayanlab_events_total {events_count}
+
+# HELP bayanlab_businesses_total Total number of businesses in database
+# TYPE bayanlab_businesses_total gauge
+bayanlab_businesses_total {businesses_count}
+
+# HELP bayanlab_events_by_region Events count by region
+# TYPE bayanlab_events_by_region gauge
+"""
+        for row in events_by_region.fetchall():
+            region, count = row
+            metrics_text += f'bayanlab_events_by_region{{region="{region}"}} {count}\n'
+
+        metrics_text += """
+# HELP bayanlab_businesses_by_region Businesses count by region
+# TYPE bayanlab_businesses_by_region gauge
+"""
+        for row in businesses_by_region.fetchall():
+            region, count = row
+            metrics_text += f'bayanlab_businesses_by_region{{region="{region}"}} {count}\n'
+
+        return JSONResponse(
+            content=metrics_text,
+            media_type="text/plain; version=0.0.4"
+        )
+
+    except Exception as e:
+        logger.error(f"Metrics endpoint failed: {e}")
+        return JSONResponse(
+            status_code=503,
+            content="# Metrics unavailable\n",
+            media_type="text/plain"
+        )
 
 
 @app.get("/v1/events", response_model=EventsResponse)
-@limiter.limit("60/minute")
+@limiter.limit("100/minute")
 async def get_events(
-    request,
+    request: Request,
     region: str = Query("CO", description="Region code (e.g., CO, US-CA, MY)"),
     city: Optional[str] = Query(None, description="Filter by city"),
     updated_since: Optional[datetime] = Query(None, description="Return events updated since this timestamp"),
@@ -149,9 +235,9 @@ async def get_events(
 
 
 @app.get("/v1/businesses", response_model=BusinessesResponse)
-@limiter.limit("60/minute")
+@limiter.limit("100/minute")
 async def get_businesses(
-    request,
+    request: Request,
     region: str = Query("CO", description="Region code (e.g., CO, US-CA, MY)"),
     category: Optional[str] = Query(None, description="Filter by category"),
     city: Optional[str] = Query(None, description="Filter by city"),
@@ -248,9 +334,9 @@ async def get_businesses(
 
 
 @app.get("/v1/metrics", response_model=MetricsResponse)
-@limiter.limit("30/minute")
+@limiter.limit("100/minute")
 async def get_metrics(
-    request,
+    request: Request,
     region: Optional[str] = Query(None, description="Filter by region"),
     db: AsyncSession = Depends(get_db)
 ):
@@ -320,7 +406,7 @@ async def get_metrics(
 
 if __name__ == "__main__":
     uvicorn.run(
-        "services.api_service.main:app",
+        "backend.services.api_service.main:app",
         host=settings.api_host,
         port=settings.api_port,
         workers=settings.api_workers,

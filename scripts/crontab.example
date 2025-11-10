@@ -1,0 +1,51 @@
+# BayanLab Backbone - Crontab Configuration
+#
+# Installation:
+#   1. Copy this file: cp scripts/crontab.example scripts/crontab
+#   2. Edit paths to match your installation
+#   3. Install: crontab scripts/crontab
+#   4. Verify: crontab -l
+#
+# Or edit directly: crontab -e
+
+# Environment variables for cron jobs
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+MAILTO=your-email@example.com
+
+# Project root directory (CHANGE THIS)
+PROJECT_ROOT=/Users/hfox/Developments/bayanlab
+
+# ========================================
+# BayanLab Pipeline Jobs
+# ========================================
+
+# Run full pipeline every 4 hours (at 00:00, 04:00, 08:00, 12:00, 16:00, 20:00)
+0 */4 * * * cd $PROJECT_ROOT && ./scripts/run_pipeline_cron.sh all >> logs/cron.log 2>&1
+
+# Alternative: Run events and businesses separately
+# Run events pipeline every 4 hours
+# 0 */4 * * * cd $PROJECT_ROOT && ./scripts/run_pipeline_cron.sh events >> logs/cron_events.log 2>&1
+
+# Run businesses pipeline every 6 hours
+# 0 */6 * * * cd $PROJECT_ROOT && ./scripts/run_pipeline_cron.sh businesses >> logs/cron_businesses.log 2>&1
+
+# ========================================
+# Maintenance Jobs
+# ========================================
+
+# Clean up old staging data (runs daily at 2am)
+0 2 * * * cd $PROJECT_ROOT && uv run python -c "from backend.services.common.database import get_sync_session; from sqlalchemy import text; session = get_sync_session().__enter__(); session.execute(text('DELETE FROM staging_events WHERE ingested_at < NOW() - INTERVAL \\'90 days\\')); session.commit()" >> logs/cleanup.log 2>&1
+
+# Database backup (runs daily at 3am with 30-day retention)
+0 3 * * * cd $PROJECT_ROOT && ./scripts/backup_database.sh >> logs/backup.log 2>&1
+
+# Log rotation check (runs daily at 4am)
+0 4 * * * /usr/sbin/logrotate -f $PROJECT_ROOT/scripts/logrotate.conf >> logs/logrotate.log 2>&1
+
+# ========================================
+# Health Checks (Optional)
+# ========================================
+
+# Check if API is running (every 5 minutes)
+# */5 * * * * curl -f http://localhost:8000/v1/metrics || echo "API down at $(date)" >> logs/health_check.log

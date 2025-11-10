@@ -461,6 +461,388 @@ See [TROUBLESHOOTING.md](troubleshooting.md) for comprehensive guide.
 
 ---
 
+## Automated Scheduling
+
+### Production Cron Setup
+
+For production deployments, use cron to run the pipeline automatically every 4 hours.
+
+#### 1. Test the Cron Script
+
+```bash
+# Test the script manually first
+cd /path/to/bayanlab
+./scripts/run_pipeline_cron.sh all
+
+# Check the logs
+tail -f logs/cron.log
+```
+
+#### 2. Install Crontab
+
+```bash
+# Copy example crontab
+cp scripts/crontab.example scripts/crontab
+
+# Edit with your project path
+nano scripts/crontab
+# Change: PROJECT_ROOT=/Users/hfox/Developments/bayanlab
+# To:     PROJECT_ROOT=/path/to/your/bayanlab
+
+# Install crontab
+crontab scripts/crontab
+
+# Verify installation
+crontab -l
+```
+
+#### 3. Enable Email Notifications (Optional)
+
+```bash
+# Set environment variables for email alerts
+export SEND_EMAIL=true
+export EMAIL_TO=your-email@example.com
+export EMAIL_FROM=noreply@bayanlab.com
+
+# Or add to ~/.bashrc or ~/.zshrc
+```
+
+**Note:** Requires `mail` or `sendmail` command available on the system.
+
+#### 4. Monitor Logs
+
+```bash
+# Watch cron execution
+tail -f logs/cron.log
+
+# View recent pipeline logs
+ls -lt logs/pipeline_*.log | head -5
+
+# Check for errors
+grep -i error logs/pipeline_*.log
+```
+
+### Cron Schedule Options
+
+```bash
+# Every 4 hours (default - recommended)
+0 */4 * * * cd $PROJECT_ROOT && ./scripts/run_pipeline_cron.sh all
+
+# Every 2 hours (more frequent updates)
+0 */2 * * * cd $PROJECT_ROOT && ./scripts/run_pipeline_cron.sh all
+
+# Daily at 6am (less frequent)
+0 6 * * * cd $PROJECT_ROOT && ./scripts/run_pipeline_cron.sh all
+
+# Run events and businesses separately
+0 */4 * * * cd $PROJECT_ROOT && ./scripts/run_pipeline_cron.sh events
+0 */6 * * * cd $PROJECT_ROOT && ./scripts/run_pipeline_cron.sh businesses
+```
+
+### Log Rotation
+
+Logs are automatically cleaned up (30-day retention) by the cron script. For more control:
+
+```bash
+# Manual logrotate (optional)
+logrotate -f scripts/logrotate.conf
+
+# Or install system-wide
+sudo cp scripts/logrotate.conf /etc/logrotate.d/bayanlab
+```
+
+### Troubleshooting Cron
+
+**Cron not running:**
+```bash
+# Check cron service
+systemctl status cron  # Linux
+# or
+sudo launchctl list | grep cron  # macOS
+
+# Check cron logs
+tail -f /var/log/syslog | grep CRON  # Linux
+tail -f /var/log/system.log | grep cron  # macOS
+```
+
+**Script permission errors:**
+```bash
+chmod +x scripts/run_pipeline_cron.sh
+```
+
+**Database connection errors:**
+```bash
+# Verify database is accessible
+PGPASSWORD=bayan psql -h localhost -p 5433 -U bayan -d bayan_backbone -c '\q'
+```
+
+---
+
+## Health Checks and Monitoring
+
+### Health Check Endpoint
+
+The API provides a `/healthz` endpoint for Kubernetes-style health checks:
+
+```bash
+# Check API health
+curl http://localhost:8000/healthz
+
+# Healthy response (200):
+{
+  "status": "healthy",
+  "service": "bayan_backbone_api",
+  "version": "1.0.0",
+  "database": "connected",
+  "timestamp": "2025-11-10T22:41:44.412756+00:00"
+}
+
+# Unhealthy response (503):
+{
+  "status": "unhealthy",
+  "service": "bayan_backbone_api",
+  "database": "disconnected",
+  "error": "[Errno 61] Connection refused",
+  "timestamp": "2025-11-10T22:41:05.841183+00:00"
+}
+```
+
+**Features:**
+- Returns HTTP 200 when healthy, 503 when unhealthy
+- Tests database connectivity automatically
+- Includes timestamp for monitoring
+- Safe to call frequently (no rate limiting)
+
+### Prometheus Metrics
+
+Prometheus-compatible metrics are available at `/metrics`:
+
+```bash
+# Get Prometheus metrics
+curl http://localhost:8000/metrics
+
+# Output format:
+# HELP bayanlab_events_total Total number of events in database
+# TYPE bayanlab_events_total gauge
+bayanlab_events_total 108
+
+# HELP bayanlab_businesses_total Total number of businesses in database
+# TYPE bayanlab_businesses_total gauge
+bayanlab_businesses_total 108
+
+# HELP bayanlab_events_by_region Events count by region
+# TYPE bayanlab_events_by_region gauge
+bayanlab_events_by_region{region="CO"} 108
+
+# HELP bayanlab_businesses_by_region Businesses count by region
+# TYPE bayanlab_businesses_by_region gauge
+bayanlab_businesses_by_region{region="CO"} 108
+```
+
+**Metrics Available:**
+- `bayanlab_events_total` - Total events in database
+- `bayanlab_businesses_total` - Total businesses in database
+- `bayanlab_events_by_region{region="XX"}` - Events per region
+- `bayanlab_businesses_by_region{region="XX"}` - Businesses per region
+
+### Monitoring with Prometheus
+
+**prometheus.yml configuration:**
+```yaml
+scrape_configs:
+  - job_name: 'bayanlab_api'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['localhost:8000']
+    metrics_path: '/metrics'
+```
+
+### Simple Health Monitoring
+
+**Shell script for monitoring:**
+```bash
+#!/bin/bash
+# Simple health check script
+
+HEALTH_URL="http://localhost:8000/healthz"
+
+while true; do
+  if curl -f -s "$HEALTH_URL" > /dev/null; then
+    echo "$(date): API healthy"
+  else
+    echo "$(date): API unhealthy - sending alert"
+    # Send alert (email, Slack, PagerDuty, etc.)
+    echo "API down at $(date)" | mail -s "BayanLab API Alert" admin@example.com
+  fi
+  sleep 60  # Check every minute
+done
+```
+
+**Cron-based health check:**
+```bash
+# Add to crontab - check every 5 minutes
+*/5 * * * * curl -f http://localhost:8000/healthz || echo "API down at $(date)" >> /var/log/bayanlab_health.log
+```
+
+---
+
+## Rate Limiting
+
+The API implements rate limiting to prevent abuse and ensure fair usage for all clients.
+
+### Rate Limits
+
+All API endpoints have the following rate limits per IP address:
+
+| Endpoint | Rate Limit | Notes |
+|----------|-----------|-------|
+| `/v1/events` | 100 requests/minute | Per IP address |
+| `/v1/businesses` | 100 requests/minute | Per IP address |
+| `/v1/metrics` | 100 requests/minute | Per IP address |
+| `/healthz` | Unlimited | Health checks not rate limited |
+| `/metrics` (Prometheus) | Unlimited | Monitoring not rate limited |
+
+### Rate Limit Response
+
+When rate limit is exceeded, the API returns HTTP 429 (Too Many Requests):
+
+```bash
+# Example: Make 101 requests in quick succession
+curl http://localhost:8000/v1/events?region=CO
+
+# Response after 100 requests:
+HTTP/1.1 429 Too Many Requests
+{"error":"Rate limit exceeded: 100 per 1 minute"}
+```
+
+### Rate Limit Headers
+
+slowapi includes helpful headers in responses:
+
+```
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1699564800
+```
+
+### Testing Rate Limits
+
+```bash
+# Test script to verify rate limiting
+for i in {1..105}; do
+  status=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8000/v1/events?region=CO")
+  echo "Request $i: $status"
+done
+
+# Expected: First 100 return 200, next 5 return 429
+```
+
+### Best Practices for API Consumers
+
+1. **Respect rate limits** - Don't exceed 100 requests/minute
+2. **Implement exponential backoff** - Wait before retrying on 429 errors
+3. **Cache responses** - Reduce unnecessary API calls
+4. **Use pagination** - Request only what you need with `limit` and `offset`
+5. **Monitor headers** - Check `X-RateLimit-Remaining` to avoid hitting limits
+
+### Configuring Rate Limits
+
+To adjust rate limits, edit [backend/services/api_service/main.py](../backend/services/api_service/main.py):
+
+```python
+@app.get("/v1/events")
+@limiter.limit("100/minute")  # Change this value
+async def get_events(request: Request, ...):
+    ...
+```
+
+Common configurations:
+- Development: `"1000/minute"` (generous for testing)
+- Production: `"100/minute"` (current setting)
+- Strict: `"50/minute"` (high-traffic scenarios)
+
+---
+
+## Database Backups
+
+Automated daily backups with 30-day retention ensure data safety and disaster recovery.
+
+### Manual Backup
+
+```bash
+# Run backup script
+./scripts/backup_database.sh
+
+# Output:
+# Backup completed successfully!
+# Summary:
+#   Database: bayan_backbone (16 MB)
+#   Events: 108
+#   Businesses: 108
+#   Backup: backups/bayan_backbone_20251110_154934.sql.gz (28K)
+#   Duration: 1s
+#   Retention: 30 days
+```
+
+### Automated Backups (Cron)
+
+Backups run daily at 3am (configured in `scripts/crontab.example`):
+
+```bash
+# Daily backup at 3am with 30-day retention
+0 3 * * * cd $PROJECT_ROOT && ./scripts/backup_database.sh >> logs/backup.log 2>&1
+```
+
+### Restore from Backup
+
+```bash
+# Restore from latest backup
+./scripts/restore_database.sh
+
+# Restore from specific backup
+./scripts/restore_database.sh backups/bayan_backbone_20251110_154934.sql.gz
+```
+
+**Warning:** Restore will drop and recreate the database. Always creates pre-restore backup for safety.
+
+### Backup Features
+
+- **Automated retention**: Deletes backups older than 30 days
+- **Integrity verification**: Tests gzip files after creation
+- **Metadata tracking**: JSON metadata with each backup (size, counts, timestamp)
+- **Email alerts**: Optional notifications on failure
+- **Version compatibility**: Uses Docker pg_dump to match database version
+
+### Monitoring
+
+```bash
+# Check backup logs
+tail -f logs/backup.log
+
+# List all backups
+ls -lh backups/
+
+# View backup metadata
+cat backups/bayan_backbone_*.meta | jq .
+```
+
+### Configuration
+
+```bash
+# Custom retention (60 days)
+RETENTION_DAYS=60 ./scripts/backup_database.sh
+
+# Custom location
+BACKUP_DIR=/mnt/backups ./scripts/backup_database.sh
+
+# Enable email notifications
+SEND_EMAIL=true EMAIL_TO=admin@example.com ./scripts/backup_database.sh
+```
+
+See [scripts/README.md](../scripts/README.md) for complete backup documentation.
+
+---
+
 ## Next Steps
 
 1. **Test the system:** Run QA checklist (`./test_qa.sh`)

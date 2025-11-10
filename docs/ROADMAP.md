@@ -49,22 +49,23 @@ Build a scalable, multi-region data backbone that aggregates Muslim community ev
 
 **Goal:** Make the system production-ready for The Ummah and ProWasl apps
 
-### Current Sprint: Calendar Integration ⏳
+### Current Sprint: Calendar Integration ✅ (Complete)
 - [x] Dual-mode ICS poller (URL + Calendar API)
 - [x] Service account setup guide
 - [x] Masjid onboarding documentation
-- [ ] Onboard first production masjid (blocked by org permissions)
-- [ ] Test with personal test calendar
+- [x] Test with personal test calendar (2 events successfully ingested)
+- [ ] Onboard first production masjid (blocked by ICFC org permissions)
 
-**Blocker:** ICFC calendar sharing restricted by Google Workspace admin
+**Note:** Calendar API verified working end-to-end with personal Gmail calendar
 
-### Infrastructure
-- [ ] Automated scheduling (APScheduler for 4-hour rebuilds)
-- [ ] Health checks (`/healthz`, `/metrics` Prometheus)
-- [ ] Rate limiting (100 req/min per IP)
-- [ ] Error alerting (email on pipeline failures)
-- [ ] Database backups (daily, 30-day retention)
-- [ ] CDN for static exports
+### Infrastructure ✅ (Complete)
+- [x] **Automated scheduling** (cron job for 4-hour rebuilds)
+- [x] Error alerting (email on pipeline failures)
+- [x] Log rotation (30-day retention)
+- [x] **Health checks** (`/healthz`, `/metrics` Prometheus)
+- [x] **Rate limiting** (100 req/min per IP)
+- [x] **Database backups** (daily, 30-day retention)
+- [ ] CDN for static exports (Phase 3)
 
 ### Testing & Quality
 - [ ] E2E test suite

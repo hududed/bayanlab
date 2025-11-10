@@ -169,9 +169,24 @@ Key technical decisions for BayanLab Backbone.
 
 **Rationale:** ACID, spatial queries, JSONB support, mature.
 
-**Consequences:**  
-✅ Reliable, great for structured + spatial data  
+**Consequences:**
+✅ Reliable, great for structured + spatial data
 ❌ Vertical scaling limits (read replicas mitigate)
+
+---
+
+## ADR-014: Cron for Scheduling
+**Date:** Nov 2025 | **Status:** Accepted
+
+**Decision:** Use cron for pipeline scheduling instead of APScheduler.
+
+**Rationale:** Simpler, more reliable, standard Unix tool, better process isolation.
+
+**Consequences:**
+✅ Simple, reliable, no Python dependencies
+✅ Better process isolation (each run is independent)
+✅ Easy to monitor with standard tools
+❌ Less flexible than APScheduler (no dynamic scheduling)
 
 ---
 

@@ -53,5 +53,8 @@ exports/*.json
 *.db
 *.sqlite
 
+# Backups (generated)
+backups/
+
 # Docker
 docker-compose.override.yml
