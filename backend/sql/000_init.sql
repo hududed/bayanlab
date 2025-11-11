@@ -6,7 +6,7 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Create enum types
-CREATE TYPE event_source AS ENUM ('ics', 'csv');
+CREATE TYPE event_source AS ENUM ('ics', 'csv', 'calendar_api');
 CREATE TYPE business_source AS ENUM ('osm', 'certifier', 'csv');
 CREATE TYPE business_category AS ENUM ('restaurant', 'service', 'retail', 'grocery', 'butcher', 'other');
 CREATE TYPE entity_type AS ENUM ('event', 'business');

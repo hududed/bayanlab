@@ -5,10 +5,12 @@ Supports both ICS URLs and Google Calendar API
 import httpx
 import uuid
 import os
+import json
 from datetime import datetime, timezone
 from icalendar import Calendar
 from typing import List, Dict, Any, Optional
 from pathlib import Path
+from sqlalchemy import text
 from ...common.logger import get_logger
 from ...common.config import get_sources_config
 from ...common.database import get_sync_session
@@ -226,7 +228,7 @@ class ICSPoller:
             'address_state': 'CO',  # Default for V1
             'location': location,
             'url': url_str,
-            'source': 'calendar_api',
+            'source': 'ics',  # Use 'ics' for both Calendar API and ICS URL
             'source_ref': event_id,
         }
 
@@ -249,7 +251,7 @@ class ICSPoller:
                 # Use Google Calendar API
                 logger.info(f"Using Google Calendar API for {source_id}")
                 events = self.fetch_calendar_api(calendar_id, source)
-                source_type = 'calendar_api'
+                source_type = 'ics'  # Use 'ics' for both (calendar events)
             elif url:
                 # Fall back to ICS URL
                 logger.info(f"Using ICS URL for {source_id}")
@@ -262,19 +264,20 @@ class ICSPoller:
             # Insert into staging
             with get_sync_session() as session:
                 for event_data in events:
-                    query = """
+                    query = text("""
                     INSERT INTO staging_events (staging_id, ingest_run_id, source, source_ref, raw_payload)
-                    VALUES (gen_random_uuid(), :ingest_run_id, :source, :source_ref, :raw_payload)
-                    """
+                    VALUES (gen_random_uuid(), :ingest_run_id, :source, :source_ref, CAST(:raw_payload AS jsonb))
+                    """)
                     session.execute(
                         query,
                         {
                             'ingest_run_id': str(self.ingest_run_id),
                             'source': source_type,
                             'source_ref': event_data.get('source_ref'),
-                            'raw_payload': event_data
+                            'raw_payload': json.dumps(event_data)
                         }
                     )
+                session.commit()  # Explicitly commit
 
             logger.info(f"Ingested {len(events)} events from {source_id}", extra={
                 'ingest_run_id': self.ingest_run_id,
