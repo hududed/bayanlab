@@ -190,4 +190,112 @@ Key technical decisions for BayanLab Backbone.
 
 ---
 
+## ADR-015: Hybrid Enrichment Pipeline (Google Places + Crawl4AI)
+**Date:** Nov 2025 | **Status:** Accepted
+
+**Context:** ProWasl business directory needs enriched data (location, services, contact info) for 197+ Muslim-owned businesses from Muslim Professionals network. Initial CSV has no location data.
+
+**Decision:** Use hybrid enrichment pipeline:
+1. **Google Places API** for location/contact data (address, phone, website)
+2. **Crawl4AI + LLM** for deep website scraping (services, about, team size)
+3. **Manual QA** for final verification
+
+**Alternatives Considered:**
+- LinkedIn scraping: Fragile, ToS violations, account bans, manual effort
+- Manual enrichment: 8-16 hours for 197 businesses
+- Pure web scraping: Fragile CSS selectors, anti-bot detection
+- Crawl4AI only: Less reliable for location data than Places API
+
+**Rationale:**
+- Google Places API is free (under $200/month limit), official, 90% success rate
+- Crawl4AI uses LLM to understand any website structure (no brittle selectors)
+- Combination is fast (2-3 hours), cheap ($0-1), and reliable
+- Scalable to 1,000s of businesses for national expansion
+
+**Consequences:**
+✅ Fast enrichment (30 min for 197 businesses)
+✅ High success rate (~90% for location, ~70% for website data)
+✅ Low cost ($0 for Places API, $0.20 for LLM extraction)
+✅ No ToS violations (official APIs only)
+✅ Scalable architecture
+❌ Requires Google Cloud account setup (one-time, 10 min)
+❌ Depends on external APIs (fallback: manual enrichment)
+
+**Fallback Strategy:**
+If Google Places API unavailable:
+- Option A: Crawl4AI scrapes Google search results (slower, less reliable)
+- Option B: Manual LinkedIn enrichment via LinkedIn Helper
+- Option C: Hire VA on Fiverr ($50-100 for 197 businesses)
+
+---
+
+## ADR-016: Enigma-Inspired Entity Model Evolution
+**Date:** Nov 2025 | **Status:** Accepted
+
+**Context:** Current `business_canonical` table is flat and limited. To build a commercial-grade business data API (like Enigma.com) serving multiple apps (ProWasl, The Ummah), need richer entity model with relationships, certifications, and Muslim-specific attributes.
+
+**Decision:** Evolve database schema to match Enigma's entity model, with Muslim-focused extensions:
+
+**Entity Types:**
+1. **business_brands** - Customer-facing business identities (name, logo, website)
+2. **business_locations** - Physical operating locations (address, hours, status)
+3. **legal_entities** - Legal business structures (LLC, Corp, registrations)
+4. **industries** - Hierarchical industry classification (Halal Food → Restaurants → Fast Casual)
+5. **brand_certifications** - Halal certifications (ISNA, IFANCA, HMA), expiration tracking
+6. **brand_owners** - Business owners (opt-in, privacy-conscious)
+
+**Muslim-Specific Attributes:**
+- `muslim_owned` (boolean)
+- `verified_muslim_owner` (boolean, community-verified)
+- `halal_certified` (boolean)
+- `prayer_space_available` (boolean)
+- `wudu_facilities` (boolean)
+- `hijab_friendly` (boolean)
+- `ramadan_hours` (JSONB, special operating hours)
+- `supports_masjid` (boolean, donates to masjids)
+- `zakat_friendly` (boolean, accepts Zakat payments)
+
+**API Evolution:**
+- Phase 1-3: REST API (current)
+- Phase 4+: GraphQL API with Relay pagination (like Enigma)
+- Advanced filters: halal, Muslim-owned, prayer space, certifications
+- Aggregation queries (business stats, trends)
+
+**Alternatives Considered:**
+- Keep flat `business_canonical` table: Simple but limits scalability and API richness
+- Build custom model from scratch: Reinventing the wheel, Enigma already proved this works
+- Copy Enigma exactly: Miss Muslim-specific needs (halal, prayer accommodations)
+
+**Rationale:**
+- Enigma's model is proven for commercial business data APIs
+- Separation of Brand/Location/Legal Entity enables rich relationships and queries
+- Muslim-specific attributes differentiate BayanLab from general business directories
+- GraphQL API enables flexible queries for diverse app needs
+- Scalable to 100,000+ businesses nationally/internationally
+
+**Consequences:**
+✅ Commercial-grade data model matching industry standards (Enigma)
+✅ Rich API capabilities (filters, relationships, aggregations)
+✅ Muslim-specific features competitors can't match
+✅ Scalable to national/international expansion
+✅ Supports revenue model (API pricing tiers, premium features)
+❌ Breaking change: Must migrate existing data from `business_canonical`
+❌ More complex schema: Higher development/maintenance effort
+❌ GraphQL adds API surface area to maintain
+
+**Migration Strategy:**
+- Phase 1 (Q1 2026): Build new tables alongside `business_canonical`
+- Phase 2 (Q2 2026): Migrate existing data, dual-write to both schemas
+- Phase 3 (Q3 2026): Deprecate `business_canonical`, GraphQL API launch
+- Phase 4 (Q4 2026): Remove old schema
+
+**Revenue Model (Waqf-First):**
+- Free tier: Non-profits, masjids, students (1,000 API calls/month)
+- Paid tiers: $99 → $499 → $2,500/month (10K → 100K → 1M calls)
+- **50% of all revenue donated to masjids** (ongoing sadaqah jariyah)
+
+**See:** [ENIGMA_INSPIRED_ROADMAP.md](ENIGMA_INSPIRED_ROADMAP.md) for complete technical specification
+
+---
+
 **Maintained by:** BayanLab Engineering

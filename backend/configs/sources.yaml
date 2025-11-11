@@ -9,26 +9,19 @@
 
 ics_sources:
   # TESTING: Personal test calendar to verify Calendar API works
-  - id: "test_calendar"
-    calendar_id: "PASTE_YOUR_CALENDAR_ID_HERE@group.calendar.google.com"  # Replace with your test calendar ID
-    venue_name: "Test Calendar"
-    city: "Fort Collins"
-    enabled: true
-
-  # PRODUCTION: ICFC calendar (Calendar API blocked by org policy)
-  - id: "foco_icfc_volunteering"
-    # calendar_id: "volunteering@icfc.org"  # Disabled: org policy prevents "See all event details" sharing
-    url: "https://calendar.google.com/calendar/ical/volunteering%40icfc.org/public/basic.ics"  # Returns 404 (calendar is private)
-    venue_name: "Islamic Center Fort Collins Volunteering"
-    city: "Fort Collins"
-    enabled: false  # Disabled until permission issue resolved
-
-  # Example: Using public ICS URL only
-  - id: "denver_masjid_sample"
-    url: "https://calendar.google.com/calendar/ical/sample_denver/public/basic.ics"
-    venue_name: "Denver Islamic Society"
+  - id: "test_personal_calendar"
+    calendar_id: "094ffb4ab34d6159b610cc71dcc7b64157b94f29a82111aa3e0709055f48b177@group.calendar.google.com"  # Replace with your test calendar ID
+    venue_name: "Test Venue"
     city: "Denver"
     enabled: true
+
+  # PRODUCTION: ICFC calendar (Blocked - waiting on org admin)
+  # - id: "foco_icfc_volunteering"
+  #   calendar_id: "volunteering@icfc.org"  # Blocked: org policy prevents "See all event details" sharing
+  #   venue_name: "Islamic Center Fort Collins Volunteering"
+  #   city: "Fort Collins"
+  #   enabled: false  # Disabled until permission issue resolved
+
 
   # Example: Calendar API only (private calendar shared with service account)
   - id: "springs_islamic_center"

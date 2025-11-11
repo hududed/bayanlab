@@ -48,6 +48,7 @@ htmlcov/
 
 # Exports (generated)
 exports/*.json
+exports/business_filtering/*.csv
 
 # Database
 *.db

@@ -843,13 +843,144 @@ See [scripts/README.md](../scripts/README.md) for complete backup documentation.
 
 ---
 
+## Business Enrichment Pipeline (ProWasl)
+
+Automated pipeline to enrich Muslim business owner data from Muslim Professionals network.
+
+### Overview
+
+**Goal:** Transform 197 filtered business owners → 10-20 verified Colorado businesses for ProWasl
+
+**Pipeline:**
+1. Filter Muslim Professionals CSV → 197 service business owners ✅
+2. Google Places API → Get location, phone, website
+3. Crawl4AI + LLM → Scrape websites for services, about, team size
+4. Manual QA → Verify and onboard to ProWasl
+
+### Step 1: Filter Business Owners (✅ Complete)
+
+```bash
+# Filter 7,485 professionals → 197 high-priority owners
+python scripts/filter_business_owners.py
+
+# Output:
+# - exports/business_filtering/high_priority_owners.csv (197 records)
+# - exports/business_filtering/all_business_owners.csv (584 records)
+# - exports/business_filtering/service_industry_professionals.csv (2,260 records)
+```
+
+### Step 2: Google Places API Enrichment
+
+**Setup (one-time, 10 minutes):**
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com)
+2. Create new project "ProWasl" or use existing
+3. Enable "Places API (New)"
+4. Create API key (restrict to Places API)
+5. Add to `.env`:
+   ```bash
+   GOOGLE_PLACES_API_KEY=your_api_key_here
+   ```
+
+**Run enrichment:**
+
+```bash
+# Install dependency
+uv add googlemaps
+
+# Enrich all 197 businesses (takes ~30 minutes)
+uv run python scripts/enrich_google_places.py
+
+# Output: exports/enrichment/google_places_enriched.csv
+# Contains: address, city, state, zip, phone, website, hours, rating
+```
+
+**Filter for Colorado:**
+
+```bash
+# Extract Colorado businesses
+grep -i "colorado\|, CO" exports/enrichment/google_places_enriched.csv > exports/enrichment/colorado_businesses.csv
+
+# Count
+wc -l exports/enrichment/colorado_businesses.csv
+# Expected: 10-20 businesses
+```
+
+**Cost:** $0 (free tier covers 11,700 searches/month, you're using 197)
+
+### Step 3: Deep Website Scraping (Crawl4AI)
+
+**Setup:**
+
+```bash
+# Install Crawl4AI and LLM provider
+uv add crawl4ai openai
+
+# Add OpenAI API key to .env (or use Claude/local LLM)
+echo "OPENAI_API_KEY=your_key" >> .env
+```
+
+**Run deep scraping:**
+
+```bash
+# Scrape Colorado business websites (takes ~1 hour for 20 sites)
+uv run python scripts/deep_scrape_websites.py \
+  --input exports/enrichment/colorado_businesses.csv \
+  --output exports/enrichment/fully_enriched_colorado.csv
+
+# Extracts: services, description, service_area, years_in_business, team_size, certifications
+```
+
+**Cost:** ~$0.01 per business with GPT-4o-mini = $0.20 for 20 businesses
+
+### Step 4: Manual QA
+
+For each business:
+1. ✅ Google the business (confirm exists)
+2. ✅ Call phone number (verify working)
+3. ✅ Visit website (still active?)
+4. ✅ Check services match ProWasl use case
+5. ✅ Add to `business_canonical` table
+
+**Time:** 5-10 min per business = 1-2 hours for 20 businesses
+
+### Fallback Options
+
+If Google Places API unavailable:
+
+**Option A: Crawl4AI Google Search Scraping**
+```bash
+# Scrape Google search results (slower, less reliable)
+uv run python scripts/crawl4ai_google_search.py --limit 197
+```
+
+**Option B: Manual LinkedIn Enrichment**
+- Use LinkedIn Helper to get city/state from profiles
+- Takes 2-5 min per person
+- Total: 6-16 hours for 197 people
+
+**Option C: Hire VA on Fiverr**
+- $50-100 for someone to enrich 197 businesses manually
+- Provide them with template spreadsheet
+
+### Documentation
+
+See detailed guides:
+- [docs/complete_enrichment_pipeline.md](complete_enrichment_pipeline.md) - Full pipeline overview
+- [docs/google_enrichment_options.md](google_enrichment_options.md) - Alternative approaches
+- [docs/business_enrichment_strategy.md](business_enrichment_strategy.md) - Phase 1-3 strategy
+- [docs/linkedin_helper_workflow.md](linkedin_helper_workflow.md) - Manual LinkedIn workflow
+
+---
+
 ## Next Steps
 
 1. **Test the system:** Run QA checklist (`./test_qa.sh`)
 2. **Add real data:** Replace sample ICS URLs in `sources.yaml`
 3. **Set up Google Calendar API:** See [google-calendar.md](google-calendar.md)
 4. **Onboard masjids:** Share [masjid-onboarding.md](masjid-onboarding.md)
-5. **Deploy to production:** See [architecture.md](architecture.md) for deployment guide
+5. **Enrich businesses:** Run enrichment pipeline (see above)
+6. **Deploy to production:** See [architecture.md](architecture.md) for deployment guide
 
 ---
 
