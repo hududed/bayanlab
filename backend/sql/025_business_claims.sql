@@ -13,11 +13,13 @@ CREATE TABLE IF NOT EXISTS business_claim_submissions (
     business_name VARCHAR(300) NOT NULL,
     business_city VARCHAR(100) NOT NULL,
     business_state VARCHAR(2) NOT NULL DEFAULT 'CO',
+    business_industry VARCHAR(100),
     business_website VARCHAR(1000),
 
     -- Optional enrichment (can follow up later)
     business_description TEXT,
     business_services TEXT[], -- Array of services offered
+    muslim_owned BOOLEAN DEFAULT FALSE
 
     -- Submission metadata
     submitted_at TIMESTAMPTZ DEFAULT NOW(),
