@@ -75,6 +75,14 @@ app.add_middleware(
 )
 
 
+@app.get("/")
+async def root():
+    """
+    Root endpoint - redirects to claim form
+    """
+    return {"message": "BayanLab Claim Portal", "endpoints": {"/claim": "Business claim form", "/healthz": "Health check", "/docs": "API documentation"}}
+
+
 @app.get("/healthz")
 async def healthz(db: AsyncSession = Depends(get_db)):
     """
