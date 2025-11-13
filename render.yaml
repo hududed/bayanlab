@@ -2,8 +2,7 @@ services:
   - type: web
     name: bayanlab-claim-portal
     runtime: docker
-    dockerfilePath: ./infra/docker/Dockerfile
-    dockerContext: .
+    dockerfilePath: ./Dockerfile
     plan: free
     region: oregon
     healthCheckPath: /healthz
