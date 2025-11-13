@@ -3,7 +3,7 @@ FastAPI service for BayanLab Community Data Backbone
 """
 from fastapi import FastAPI, Depends, Query, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -80,7 +80,7 @@ async def root():
     """
     Root endpoint - redirects to claim form
     """
-    return {"message": "BayanLab Claim Portal", "endpoints": {"/claim": "Business claim form", "/healthz": "Health check", "/docs": "API documentation"}}
+    return RedirectResponse(url="/claim", status_code=302)
 
 
 @app.get("/healthz")
