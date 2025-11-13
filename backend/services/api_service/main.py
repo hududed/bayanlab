@@ -3,7 +3,8 @@ FastAPI service for BayanLab Community Data Backbone
 """
 from fastapi import FastAPI, Depends, Query, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -11,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from typing import Optional
 from datetime import datetime, timezone
+from pydantic import BaseModel, EmailStr
+from pathlib import Path
 import uvicorn
 
 from ..common.database import get_db
@@ -21,6 +24,27 @@ from ..common.models import EventsResponse, BusinessesResponse, MetricsResponse,
 settings = get_settings()
 logger = get_logger("api_service")
 
+
+# Pydantic models for business claim
+class BusinessClaimRequest(BaseModel):
+    owner_name: str
+    owner_email: EmailStr
+    owner_phone: Optional[str] = None
+    business_name: str
+    business_city: str
+    business_state: str
+    business_industry: Optional[str] = None
+    business_website: Optional[str] = None
+    business_description: Optional[str] = None
+    muslim_owned: bool = False
+    submitted_from: str = "web"
+
+
+class BusinessClaimResponse(BaseModel):
+    claim_id: str
+    message: str
+
+
 # Initialize FastAPI
 app = FastAPI(
     title="BayanLab Community Data Backbone API",
@@ -30,6 +54,11 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_url="/openapi.json"
 )
+
+# Mount static files (for claim form)
+static_path = Path(__file__).parent / "static"
+if static_path.exists():
+    app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -402,6 +431,87 @@ async def get_metrics(
     except Exception as e:
         logger.error(f"Error fetching metrics: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/claim")
+async def serve_claim_form():
+    """
+    Serve the business claim form
+    """
+    static_path = Path(__file__).parent / "static" / "claim.html"
+    if not static_path.exists():
+        raise HTTPException(status_code=404, detail="Claim form not found")
+    return FileResponse(str(static_path))
+
+
+@app.post("/v1/businesses/claim", response_model=BusinessClaimResponse)
+@limiter.limit("10/minute")
+async def submit_business_claim(
+    request: Request,
+    claim: BusinessClaimRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Submit a business claim/registration
+    Allows business owners to add their business to the directory
+    """
+    try:
+        # Validate state (for now, allow CO and common states)
+        valid_states = ['CO', 'TX', 'CA', 'NY', 'IL', 'MI', 'FL', 'WA', 'AZ', 'GA']
+        if claim.business_state.upper() not in valid_states:
+            raise HTTPException(
+                status_code=400,
+                detail=f"State must be one of: {', '.join(valid_states)}"
+            )
+
+        # Insert claim into database
+        insert_query = text("""
+            INSERT INTO business_claim_submissions (
+                owner_name, owner_email, owner_phone,
+                business_name, business_city, business_state,
+                business_industry, business_website, business_description,
+                muslim_owned, submitted_from, submitted_at, status
+            )
+            VALUES (
+                :owner_name, :owner_email, :owner_phone,
+                :business_name, :business_city, :business_state,
+                :business_industry, :business_website, :business_description,
+                :muslim_owned, :submitted_from, NOW(), 'pending'
+            )
+            RETURNING claim_id
+        """)
+
+        result = await db.execute(insert_query, {
+            'owner_name': claim.owner_name,
+            'owner_email': claim.owner_email,
+            'owner_phone': claim.owner_phone,
+            'business_name': claim.business_name,
+            'business_city': claim.business_city,
+            'business_state': claim.business_state.upper(),
+            'business_industry': claim.business_industry,
+            'business_website': claim.business_website,
+            'business_description': claim.business_description,
+            'muslim_owned': claim.muslim_owned,
+            'submitted_from': claim.submitted_from
+        })
+
+        await db.commit()
+
+        claim_id = result.scalar()
+
+        logger.info(f"Business claim submitted: {claim_id} - {claim.business_name} by {claim.owner_email}")
+
+        return BusinessClaimResponse(
+            claim_id=str(claim_id),
+            message="Thank you! Your business has been submitted for review."
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error submitting business claim: {e}")
+        raise HTTPException(status_code=500, detail="Failed to submit claim. Please try again.")
 
 
 if __name__ == "__main__":

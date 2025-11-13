@@ -63,3 +63,4 @@ docker-compose.override.yml
 # Raw data (never commit)
 backend/data/
 exports/
+.vercel

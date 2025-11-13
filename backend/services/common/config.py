@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     # Google Calendar API
     google_application_credentials: str | None = None
 
+    # Google Places API (for business enrichment)
+    google_places_api_key: str | None = None
+    google_custom_search_api_key: str | None = None
+    google_custom_search_engine_id: str | None = None
+
     # Region (default for V1)
     default_region: str = "CO"
 

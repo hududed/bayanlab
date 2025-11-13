@@ -21,5 +21,8 @@ RUN cd /app && uv pip install --system -e .
 # Set Python path
 ENV PYTHONPATH=/app/backend
 
-# Default command
-CMD ["python", "-m", "backend.services.api_service.main"]
+# Expose port
+EXPOSE 8000
+
+# Default command (can be overridden by Railway)
+CMD ["uvicorn", "backend.services.api_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
