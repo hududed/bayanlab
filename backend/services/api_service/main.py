@@ -83,6 +83,19 @@ async def root():
     return RedirectResponse(url="/claim", status_code=302)
 
 
+@app.get("/favicon.ico")
+@app.get("/favicon.png")
+async def favicon():
+    """
+    Serve favicon
+    """
+    favicon_path = Path(__file__).parent / "static" / "favicon.png"
+    if favicon_path.exists():
+        return FileResponse(str(favicon_path))
+    # Return 204 No Content if favicon doesn't exist
+    return JSONResponse(status_code=204, content=None)
+
+
 @app.get("/healthz")
 async def healthz(db: AsyncSession = Depends(get_db)):
     """
