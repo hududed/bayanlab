@@ -29,6 +29,8 @@ dependencies = [
     "greenlet>=3.2.4",
     "beautifulsoup4>=4.14.2",
     "requests>=2.32.5",
+    "googlemaps>=4.10.0",
+    "crawl4ai>=0.7.6",
 ]
 
 [project.optional-dependencies]

@@ -1,32 +1,24 @@
 #!/usr/bin/env python3
 """
-Enrich business owner data using Google Places API.
-
-For each business, searches Google Places and extracts:
-- Address (street, city, state, zip)
-- Phone number
-- Website
-- Business hours
-- Google Maps rating
-- Coordinates (lat/long)
+Enrich business owner data using Google Places API (New).
 
 Usage:
-    python scripts/enrich_google_places.py
-    python scripts/enrich_google_places.py --input custom.csv --limit 50
+    python scripts/enrich_google_places_new.py --limit 5
+    python scripts/enrich_google_places_new.py  # Full run
 
 Requirements:
-    uv add googlemaps
+    uv add requests python-dotenv
     GOOGLE_PLACES_API_KEY in .env
 """
 
 import argparse
 import csv
+import json
 import os
-import re
 import time
 from pathlib import Path
 from typing import Dict, Optional
-import googlemaps
+import requests
 from dotenv import load_dotenv
 
 # Load .env file
@@ -40,19 +32,13 @@ if not API_KEY:
     print("Add to .env: GOOGLE_PLACES_API_KEY=your_key_here")
     exit(1)
 
-# Initialize Google Maps client
-gmaps = googlemaps.Client(key=API_KEY)
+# New Places API endpoint
+PLACES_API_BASE = "https://places.googleapis.com/v1"
 
 
 def search_place(company_name: str, industry: str = None) -> Optional[Dict]:
-    """
-    Search Google Places for a business and return enriched data.
+    """Search Google Places (New API) for a business."""
 
-    Returns:
-        Dict with keys: place_id, name, address, city, state, zip, phone, website, hours, rating, lat, lng
-    """
-
-    # Build search query
     query = company_name
     if industry:
         query += f" {industry}"
@@ -60,98 +46,89 @@ def search_place(company_name: str, industry: str = None) -> Optional[Dict]:
     print(f"  Searching: {query}")
 
     try:
-        # Search for place
-        places_result = gmaps.places(query=query)
+        search_url = f"{PLACES_API_BASE}/places:searchText"
+        headers = {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": API_KEY,
+            "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.addressComponents,places.internationalPhoneNumber,places.websiteUri,places.rating,places.location,places.regularOpeningHours"
+        }
 
-        if not places_result.get('results'):
+        payload = {"textQuery": query}
+
+        response = requests.post(search_url, headers=headers, json=payload)
+
+        if response.status_code != 200:
+            print(f"  ❌ API Error: {response.status_code} - {response.text[:200]}")
+            return None
+
+        result = response.json()
+
+        if not result.get('places'):
             print(f"  ⚠️  No results found")
             return None
 
-        # Get first result (most relevant)
-        place = places_result['results'][0]
-        place_id = place['place_id']
+        place = result['places'][0]
 
-        # Get detailed place information
-        details_result = gmaps.place(place_id=place_id, fields=[
-            'formatted_address',
-            'address_components',
-            'formatted_phone_number',
-            'website',
-            'opening_hours',
-            'rating',
-            'geometry'
-        ])
+        # Parse address
+        parsed = parse_address(place.get('addressComponents', []))
 
-        if not details_result.get('result'):
-            print(f"  ⚠️  No details found")
-            return None
+        # Format hours
+        hours = None
+        if place.get('regularOpeningHours'):
+            hours_list = place['regularOpeningHours'].get('weekdayDescriptions', [])
+            if hours_list:
+                hours = '; '.join(hours_list)
 
-        details = details_result['result']
-
-        # Parse address components
-        address_components = details.get('address_components', [])
-        parsed_address = parse_address_components(address_components)
-
-        # Extract data
         enriched = {
-            'place_id': place_id,
-            'google_name': details.get('name', place.get('name')),
-            'address': details.get('formatted_address'),
-            'street': parsed_address.get('street'),
-            'city': parsed_address.get('city'),
-            'state': parsed_address.get('state'),
-            'zip': parsed_address.get('zip'),
-            'country': parsed_address.get('country'),
-            'phone': details.get('formatted_phone_number'),
-            'website': details.get('website'),
-            'hours': format_hours(details.get('opening_hours')),
-            'rating': details.get('rating'),
-            'lat': details.get('geometry', {}).get('location', {}).get('lat'),
-            'lng': details.get('geometry', {}).get('location', {}).get('lng'),
+            'place_id': place.get('id'),
+            'google_name': place.get('displayName', {}).get('text'),
+            'address': place.get('formattedAddress'),
+            'street': parsed.get('street'),
+            'city': parsed.get('city'),
+            'state': parsed.get('state'),
+            'zip': parsed.get('zip'),
+            'country': parsed.get('country'),
+            'phone': place.get('internationalPhoneNumber'),
+            'website': place.get('websiteUri'),
+            'hours': hours,
+            'rating': place.get('rating'),
+            'lat': place.get('location', {}).get('latitude'),
+            'lng': place.get('location', {}).get('longitude'),
         }
 
         print(f"  ✅ Found: {enriched.get('city')}, {enriched.get('state')} | {enriched.get('phone', 'No phone')}")
         return enriched
 
-    except googlemaps.exceptions.ApiError as e:
-        print(f"  ❌ API Error: {e}")
-        return None
     except Exception as e:
         print(f"  ❌ Error: {e}")
         return None
 
 
-def parse_address_components(components: list) -> Dict:
-    """Parse Google address_components into street, city, state, zip."""
+def parse_address(components: list) -> Dict:
+    """Parse address components from New API format."""
 
-    result = {
-        'street': None,
-        'city': None,
-        'state': None,
-        'zip': None,
-        'country': None
-    }
-
+    result = {'street': None, 'city': None, 'state': None, 'zip': None, 'country': None}
     street_number = None
     route = None
 
     for component in components:
         types = component.get('types', [])
+        long_text = component.get('longText', '')
+        short_text = component.get('shortText', '')
 
         if 'street_number' in types:
-            street_number = component.get('long_name')
+            street_number = long_text
         elif 'route' in types:
-            route = component.get('long_name')
+            route = long_text
         elif 'locality' in types:
-            result['city'] = component.get('long_name')
+            result['city'] = long_text
         elif 'administrative_area_level_1' in types:
-            result['state'] = component.get('short_name')  # e.g., "CO" instead of "Colorado"
+            result['state'] = short_text
         elif 'postal_code' in types:
-            result['zip'] = component.get('long_name')
+            result['zip'] = long_text
         elif 'country' in types:
-            result['country'] = component.get('short_name')  # e.g., "US"
+            result['country'] = short_text
 
-    # Combine street number + route
     if street_number and route:
         result['street'] = f"{street_number} {route}"
     elif route:
@@ -160,23 +137,8 @@ def parse_address_components(components: list) -> Dict:
     return result
 
 
-def format_hours(opening_hours: Optional[Dict]) -> Optional[str]:
-    """Format opening hours to a readable string."""
-
-    if not opening_hours:
-        return None
-
-    weekday_text = opening_hours.get('weekday_text', [])
-    if weekday_text:
-        return '; '.join(weekday_text)
-
-    return None
-
-
 def enrich_businesses(input_csv: Path, output_csv: Path, limit: Optional[int] = None):
-    """
-    Read business owners CSV, enrich via Google Places API, save results.
-    """
+    """Read business CSV, enrich via Google Places, save results."""
 
     enriched = []
     total = 0
@@ -191,7 +153,7 @@ def enrich_businesses(input_csv: Path, output_csv: Path, limit: Optional[int] = 
         if limit:
             rows = rows[:limit]
 
-        print(f"\n🔍 Enriching {len(rows)} businesses via Google Places API...\n")
+        print(f"\n🔍 Enriching {len(rows)} businesses via Google Places API (New)...\n")
 
         for idx, row in enumerate(rows, start=1):
             total += 1
@@ -207,7 +169,6 @@ def enrich_businesses(input_csv: Path, output_csv: Path, limit: Optional[int] = 
                 skipped += 1
                 continue
 
-            # Search Google Places
             place_data = search_place(company, industry)
 
             if place_data:
@@ -234,10 +195,8 @@ def enrich_businesses(input_csv: Path, output_csv: Path, limit: Optional[int] = 
                 failed += 1
                 enriched.append({**row, 'enrichment_status': 'failed'})
 
-            # Rate limiting (Google Places free tier: no explicit limit, but be conservative)
-            time.sleep(0.5)  # 2 requests per second max
+            time.sleep(0.5)
 
-            # Progress updates every 25 businesses
             if idx % 25 == 0:
                 print(f"\n  📊 Progress: {success}/{total} successful ({success/total*100:.1f}%)\n")
 
@@ -260,10 +219,7 @@ def enrich_businesses(input_csv: Path, output_csv: Path, limit: Optional[int] = 
         print(f"Skipped: {skipped}")
         print(f"Failed: {failed}")
         print(f"\nOutput: {output_csv}")
-
-        # Filter for Colorado
         print(f"\n💡 Next steps:")
-        print(f"   # Filter for Colorado businesses:")
         print(f"   grep -i 'colorado\\|, CO' {output_csv} > {output_csv.parent}/colorado_businesses.csv")
         print(f"   wc -l {output_csv.parent}/colorado_businesses.csv")
         print(f"{'='*60}\n")
@@ -272,13 +228,10 @@ def enrich_businesses(input_csv: Path, output_csv: Path, limit: Optional[int] = 
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Enrich business owners via Google Places API')
-    parser.add_argument('--input', type=str, default='exports/business_filtering/high_priority_owners.csv',
-                        help='Input CSV file')
-    parser.add_argument('--limit', type=int, default=None,
-                        help='Limit number of businesses to enrich (for testing)')
-    parser.add_argument('--output', type=str, default=None,
-                        help='Output CSV file')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--input', type=str, default='exports/business_filtering/high_priority_owners.csv')
+    parser.add_argument('--limit', type=int, default=None)
+    parser.add_argument('--output', type=str, default=None)
 
     args = parser.parse_args()
 
@@ -288,10 +241,7 @@ def main():
         print(f"❌ Error: Input file not found: {input_csv}")
         return 1
 
-    if args.output:
-        output_csv = Path(args.output)
-    else:
-        output_csv = Path('exports/enrichment/google_places_enriched.csv')
+    output_csv = Path(args.output) if args.output else Path('exports/enrichment/google_places_enriched.csv')
 
     print(f"📂 Input: {input_csv}")
     print(f"📂 Output: {output_csv}")
