@@ -17,8 +17,7 @@ CREATE TABLE IF NOT EXISTS business_claim_submissions (
     business_website VARCHAR(1000),
 
     -- Optional enrichment (can follow up later)
-    business_description TEXT,
-    business_services TEXT[], -- Array of services offered
+    business_description TEXT, -- Services/products offered (free-form text)
     muslim_owned BOOLEAN DEFAULT FALSE
 
     -- Submission metadata
