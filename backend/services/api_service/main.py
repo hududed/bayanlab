@@ -116,9 +116,12 @@ app.add_middleware(
 @app.get("/")
 async def root():
     """
-    Root endpoint - redirects to claim form
+    Root endpoint - serve claim form directly
     """
-    return RedirectResponse(url="/claim", status_code=302)
+    static_path = Path(__file__).parent / "static" / "claim.html"
+    if not static_path.exists():
+        raise HTTPException(status_code=404, detail="Claim form not found")
+    return FileResponse(str(static_path))
 
 
 @app.get("/favicon.ico")
