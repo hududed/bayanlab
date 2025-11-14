@@ -626,8 +626,15 @@ async def sync_businesses(
 
         # Add filters
         if updated_since:
-            query += " AND submitted_at > :updated_since::timestamptz"
-            params['updated_since'] = updated_since
+            try:
+                # Parse ISO8601 datetime string
+                from dateutil import parser
+                updated_dt = parser.isoparse(updated_since)
+                query += " AND submitted_at > :updated_since"
+                params['updated_since'] = updated_dt
+            except Exception as e:
+                logger.warning(f"Invalid updated_since format: {updated_since}, error: {e}")
+                # Skip this filter if invalid format
 
         if state:
             query += " AND business_state = :state"
