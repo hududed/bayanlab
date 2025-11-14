@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     google_custom_search_api_key: str | None = None
     google_custom_search_engine_id: str | None = None
 
+    # Neon database (production)
+    neon_db_url: str | None = None
+
+    # ProWasl API integration
+    prowasl_api_key: str | None = None
+
     # Region (default for V1)
     default_region: str = "CO"
 

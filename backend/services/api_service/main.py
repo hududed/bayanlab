@@ -10,11 +10,12 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 from pydantic import BaseModel, EmailStr
 from pathlib import Path
 import uvicorn
+import os
 
 from ..common.database import get_db
 from ..common.config import get_settings
@@ -43,6 +44,35 @@ class BusinessClaimRequest(BaseModel):
 class BusinessClaimResponse(BaseModel):
     claim_id: str
     message: str
+
+
+class BusinessSyncData(BaseModel):
+    business_id: str
+    business_name: str
+    business_industry: Optional[str] = None
+    business_description: Optional[str] = None
+    business_website: Optional[str] = None
+    business_city: str
+    business_state: str
+    business_address: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    owner_name: str
+    owner_email: str
+    owner_phone: Optional[str] = None
+    muslim_owned: bool = False
+    google_place_id: Optional[str] = None
+    google_rating: Optional[float] = None
+    google_review_count: Optional[int] = None
+    business_hours: Optional[Dict[str, str]] = None
+    photos: Optional[List[str]] = None
+    status: str
+    updated_at: str
+
+
+class BusinessSyncResponse(BaseModel):
+    businesses: List[BusinessSyncData]
+    pagination: Dict[str, Any]
 
 
 # Initialize FastAPI
@@ -533,6 +563,134 @@ async def submit_business_claim(
         await db.rollback()
         logger.error(f"Error submitting business claim: {e}")
         raise HTTPException(status_code=500, detail="Failed to submit claim. Please try again.")
+
+
+@app.get("/v1/businesses/sync", response_model=BusinessSyncResponse)
+@limiter.limit("60/minute")
+async def sync_businesses(
+    request: Request,
+    updated_since: Optional[str] = Query(None, description="ISO8601 datetime - only return businesses updated after this timestamp"),
+    state: Optional[str] = Query(None, description="Filter by state code (e.g., CO, TX)"),
+    limit: int = Query(100, ge=1, le=500, description="Maximum number of results"),
+    offset: int = Query(0, ge=0, description="Pagination offset"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Sync endpoint for ProWasl directory
+
+    Returns approved businesses from business_claim_submissions table.
+    Requires X-API-Key header for authentication.
+    """
+    try:
+        # Verify API key
+        api_key = request.headers.get("X-API-Key")
+        expected_key = settings.prowasl_api_key
+
+        if not expected_key:
+            logger.error("PROWASL_API_KEY not configured in environment")
+            raise HTTPException(status_code=500, detail="Sync endpoint not configured")
+
+        if api_key != expected_key:
+            logger.warning(f"Invalid API key attempt from {get_remote_address(request)}")
+            raise HTTPException(status_code=401, detail="Invalid API key")
+
+        # Build query to fetch approved business claims
+        query = """
+            SELECT
+                claim_id::text as business_id,
+                business_name,
+                business_industry,
+                business_description,
+                business_website,
+                business_city,
+                business_state,
+                CONCAT_WS(', ', business_city, business_state) as business_address,
+                NULL::numeric as latitude,
+                NULL::numeric as longitude,
+                owner_name,
+                owner_email,
+                owner_phone,
+                muslim_owned,
+                NULL::text as google_place_id,
+                NULL::numeric as google_rating,
+                NULL::int as google_review_count,
+                NULL::jsonb as business_hours,
+                ARRAY[]::text[] as photos,
+                status,
+                submitted_at::text as updated_at
+            FROM business_claim_submissions
+            WHERE status = 'approved'
+        """
+
+        params = {}
+
+        # Add filters
+        if updated_since:
+            query += " AND submitted_at > :updated_since::timestamptz"
+            params['updated_since'] = updated_since
+
+        if state:
+            query += " AND business_state = :state"
+            params['state'] = state.upper()
+
+        # Count total matching records
+        count_query = f"SELECT COUNT(*) FROM ({query}) AS t"
+        count_result = await db.execute(text(count_query), params)
+        total = count_result.scalar() or 0
+
+        # Add pagination
+        query += " ORDER BY submitted_at DESC LIMIT :limit OFFSET :offset"
+        params['limit'] = limit
+        params['offset'] = offset
+
+        # Execute query
+        result = await db.execute(text(query), params)
+        rows = result.fetchall()
+
+        # Convert to list of dicts
+        businesses = []
+        for row in rows:
+            businesses.append({
+                'business_id': row.business_id,
+                'business_name': row.business_name,
+                'business_industry': row.business_industry,
+                'business_description': row.business_description,
+                'business_website': row.business_website,
+                'business_city': row.business_city,
+                'business_state': row.business_state,
+                'business_address': row.business_address,
+                'latitude': float(row.latitude) if row.latitude else None,
+                'longitude': float(row.longitude) if row.longitude else None,
+                'owner_name': row.owner_name,
+                'owner_email': row.owner_email,
+                'owner_phone': row.owner_phone,
+                'muslim_owned': row.muslim_owned,
+                'google_place_id': row.google_place_id,
+                'google_rating': float(row.google_rating) if row.google_rating else None,
+                'google_review_count': row.google_review_count,
+                'business_hours': row.business_hours,
+                'photos': list(row.photos) if row.photos else [],
+                'status': row.status,
+                'updated_at': row.updated_at
+            })
+
+        logger.info(f"Sync request: returned {len(businesses)} businesses (total: {total}, offset: {offset})")
+
+        return BusinessSyncResponse(
+            businesses=businesses,
+            pagination={
+                'total': total,
+                'limit': limit,
+                'offset': offset,
+                'has_more': offset + len(businesses) < total
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in sync endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Sync failed. Please try again.")
 
 
 if __name__ == "__main__":
