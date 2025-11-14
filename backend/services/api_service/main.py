@@ -34,8 +34,12 @@ class BusinessClaimRequest(BaseModel):
     business_name: str
     business_city: str
     business_state: str
+    business_street_address: Optional[str] = None
+    business_zip: Optional[str] = None
     business_industry: Optional[str] = None
     business_website: Optional[str] = None
+    business_phone: Optional[str] = None
+    business_whatsapp: Optional[str] = None
     business_description: Optional[str] = None
     muslim_owned: bool = False
     submitted_from: str = "web"
@@ -54,7 +58,11 @@ class BusinessSyncData(BaseModel):
     business_website: Optional[str] = None
     business_city: str
     business_state: str
-    business_address: Optional[str] = None
+    business_street_address: Optional[str] = None
+    business_zip: Optional[str] = None
+    business_full_address: Optional[str] = None  # Computed field
+    business_phone: Optional[str] = None
+    business_whatsapp: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     owner_name: str
@@ -520,13 +528,19 @@ async def submit_business_claim(
             INSERT INTO business_claim_submissions (
                 owner_name, owner_email, owner_phone,
                 business_name, business_city, business_state,
-                business_industry, business_website, business_description,
+                business_street_address, business_zip,
+                business_industry, business_website,
+                business_phone, business_whatsapp,
+                business_description,
                 muslim_owned, submitted_from, submitted_at, status
             )
             VALUES (
                 :owner_name, :owner_email, :owner_phone,
                 :business_name, :business_city, :business_state,
-                :business_industry, :business_website, :business_description,
+                :business_street_address, :business_zip,
+                :business_industry, :business_website,
+                :business_phone, :business_whatsapp,
+                :business_description,
                 :muslim_owned, :submitted_from, NOW(), 'pending'
             )
             RETURNING claim_id
@@ -539,8 +553,12 @@ async def submit_business_claim(
             'business_name': claim.business_name,
             'business_city': claim.business_city,
             'business_state': claim.business_state.upper(),
+            'business_street_address': claim.business_street_address,
+            'business_zip': claim.business_zip,
             'business_industry': claim.business_industry,
             'business_website': claim.business_website,
+            'business_phone': claim.business_phone,
+            'business_whatsapp': claim.business_whatsapp,
             'business_description': claim.business_description,
             'muslim_owned': claim.muslim_owned,
             'submitted_from': claim.submitted_from
@@ -604,7 +622,11 @@ async def sync_businesses(
                 business_website,
                 business_city,
                 business_state,
-                CONCAT_WS(', ', business_city, business_state) as business_address,
+                business_street_address,
+                business_zip,
+                business_full_address,
+                business_phone,
+                business_whatsapp,
                 NULL::numeric as latitude,
                 NULL::numeric as longitude,
                 owner_name,
@@ -665,7 +687,11 @@ async def sync_businesses(
                 'business_website': row.business_website,
                 'business_city': row.business_city,
                 'business_state': row.business_state,
-                'business_address': row.business_address,
+                'business_street_address': row.business_street_address,
+                'business_zip': row.business_zip,
+                'business_full_address': row.business_full_address,
+                'business_phone': row.business_phone,
+                'business_whatsapp': row.business_whatsapp,
                 'latitude': float(row.latitude) if row.latitude else None,
                 'longitude': float(row.longitude) if row.longitude else None,
                 'owner_name': row.owner_name,

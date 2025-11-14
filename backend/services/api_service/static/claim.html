@@ -192,8 +192,19 @@
             </div>
 
             <div class="form-group">
-                <label>Industry <span class="optional">(optional)</span></label>
-                <select name="business_industry">
+                <label>Street Address <span class="optional">(optional)</span></label>
+                <input type="text" name="business_street_address" placeholder="123 Main Street">
+                <small style="color: #a0aec0; font-size: 12px;">Helps customers find your business location</small>
+            </div>
+
+            <div class="form-group">
+                <label>ZIP Code <span class="optional">(optional)</span></label>
+                <input type="text" name="business_zip" placeholder="80202" pattern="[0-9]{5}" maxlength="5">
+            </div>
+
+            <div class="form-group">
+                <label>Industry <span class="required">*</span></label>
+                <select name="business_industry" required>
                     <option value="">Select your industry...</option>
                     <option value="Construction & Home Services">Construction & Home Services</option>
                     <option value="Consulting">Consulting</option>
@@ -213,6 +224,17 @@
             <div class="form-group">
                 <label>Website <span class="optional">(optional)</span></label>
                 <input type="url" name="business_website" placeholder="https://example.com">
+            </div>
+
+            <div class="form-group">
+                <label>Business Phone <span class="optional">(optional, if different from your personal phone)</span></label>
+                <input type="tel" name="business_phone" placeholder="(303) 555-1234">
+            </div>
+
+            <div class="form-group">
+                <label>WhatsApp Number <span class="optional">(optional)</span></label>
+                <input type="tel" name="business_whatsapp" placeholder="(303) 555-1234">
+                <small style="color: #a0aec0; font-size: 12px;">Many customers prefer WhatsApp for quick communication</small>
             </div>
 
             <div class="form-group">
@@ -261,8 +283,12 @@
                 business_name: formData.get('business_name'),
                 business_city: formData.get('business_city'),
                 business_state: formData.get('business_state').toUpperCase(),
+                business_street_address: formData.get('business_street_address') || null,
+                business_zip: formData.get('business_zip') || null,
                 business_industry: formData.get('business_industry') || null,
                 business_website: formData.get('business_website') || null,
+                business_phone: formData.get('business_phone') || null,
+                business_whatsapp: formData.get('business_whatsapp') || null,
                 business_description: formData.get('business_description') || null,
                 muslim_owned: formData.get('muslim_owned') === 'on',
                 submitted_from: 'web'
