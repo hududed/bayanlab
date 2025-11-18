@@ -21,6 +21,7 @@ from ..common.database import get_db
 from ..common.config import get_settings
 from ..common.logger import get_logger
 from ..common.models import EventsResponse, BusinessesResponse, MetricsResponse, EventAPI, BusinessAPI, Address, Venue, Organizer
+from .email_service import email_service
 
 settings = get_settings()
 logger = get_logger("api_service")
@@ -546,7 +547,7 @@ async def submit_business_claim(
                 :business_description,
                 :muslim_owned, :submitted_from, NOW(), 'pending'
             )
-            RETURNING claim_id
+            RETURNING claim_id, short_claim_id
         """)
 
         result = await db.execute(insert_query, {
@@ -569,12 +570,26 @@ async def submit_business_claim(
 
         await db.commit()
 
-        claim_id = result.scalar()
+        row = result.first()
+        claim_id = row[0]
+        short_claim_id = row[1]
 
-        logger.info(f"Business claim submitted: {claim_id} - {claim.business_name} by {claim.owner_email}")
+        logger.info(f"Business claim submitted: {short_claim_id} ({claim_id}) - {claim.business_name} by {claim.owner_email}")
+
+        # Send confirmation email (non-blocking - don't fail if email fails)
+        try:
+            await email_service.send_claim_confirmation(
+                to_email=claim.owner_email,
+                owner_name=claim.owner_name,
+                business_name=claim.business_name,
+                claim_id=short_claim_id
+            )
+        except Exception as email_error:
+            logger.error(f"Failed to send confirmation email: {email_error}")
+            # Continue anyway - don't fail the claim submission if email fails
 
         return BusinessClaimResponse(
-            claim_id=str(claim_id),
+            claim_id=short_claim_id,
             message="Thank you! Your business has been submitted for review."
         )
 

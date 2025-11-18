@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     # ProWasl API integration
     prowasl_api_key: str | None = None
 
+    # SendGrid Email
+    sendgrid_api_key: str | None = None
+    sendgrid_from_email: str = "info@prowasl.com"
+    sendgrid_from_name: str = "Hud from ProWasl"
+    sendgrid_reply_to: str = "info@prowasl.com"
+
     # Region (default for V1)
     default_region: str = "CO"
 

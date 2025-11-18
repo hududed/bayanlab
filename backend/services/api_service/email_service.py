@@ -1,0 +1,202 @@
+"""
+Email service for sending confirmation emails via SendGrid
+"""
+import logging
+from typing import Optional
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail, Email, To, Content
+from backend.services.common.config import get_settings
+
+logger = logging.getLogger(__name__)
+
+
+class EmailService:
+    """Service for sending emails via SendGrid"""
+
+    def __init__(self):
+        settings = get_settings()
+        self.api_key = settings.sendgrid_api_key
+        self.from_email = settings.sendgrid_from_email
+        self.from_name = settings.sendgrid_from_name
+        self.reply_to = settings.sendgrid_reply_to
+
+        if not self.api_key:
+            logger.warning("SENDGRID_API_KEY not set - email sending will be disabled")
+            self.enabled = False
+        else:
+            self.enabled = True
+            self.client = SendGridAPIClient(self.api_key)
+
+    async def send_claim_confirmation(
+        self,
+        to_email: str,
+        owner_name: str,
+        business_name: str,
+        claim_id: str
+    ) -> bool:
+        """
+        Send confirmation email when a business claim is submitted
+
+        Args:
+            to_email: Recipient email address
+            owner_name: Name of the business owner
+            business_name: Name of the business
+            claim_id: Unique claim ID
+
+        Returns:
+            True if email was sent successfully, False otherwise
+        """
+        if not self.enabled:
+            logger.warning("Email service is disabled - skipping email send")
+            return False
+
+        try:
+            # Create the email content
+            subject = f"Business Claim Received - {business_name}"
+
+            html_content = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+    <table role="presentation" style="width: 100%; border-collapse: collapse;">
+        <tr>
+            <td style="padding: 40px 20px;">
+                <table role="presentation" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 40px 30px; text-align: center;">
+                            <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700;">
+                                ✅ Claim Received!
+                            </h1>
+                        </td>
+                    </tr>
+
+                    <!-- Body -->
+                    <tr>
+                        <td style="padding: 40px 30px;">
+                            <p style="margin: 0 0 20px; color: #1f2937; font-size: 16px; line-height: 1.6;">
+                                As-salamu alaykum <strong>{owner_name}</strong>,
+                            </p>
+
+                            <p style="margin: 0 0 20px; color: #1f2937; font-size: 16px; line-height: 1.6;">
+                                JazakAllah khair for submitting <strong>{business_name}</strong> to ProWasl! 🎉
+                            </p>
+
+                            <div style="background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 20px; margin: 30px 0; border-radius: 8px;">
+                                <p style="margin: 0 0 10px; color: #065f46; font-size: 14px; font-weight: 600;">
+                                    📋 CLAIM ID
+                                </p>
+                                <p style="margin: 0; color: #047857; font-size: 18px; font-weight: 700; font-family: 'Courier New', monospace;">
+                                    {claim_id}
+                                </p>
+                            </div>
+
+                            <h2 style="margin: 30px 0 15px; color: #1f2937; font-size: 20px; font-weight: 600;">
+                                What happens next?
+                            </h2>
+
+                            <ul style="margin: 0 0 30px; padding-left: 25px; color: #4b5563; font-size: 15px; line-height: 1.8;">
+                                <li style="margin-bottom: 10px;">Our team will review your submission (usually within 24-48 hours)</li>
+                                <li style="margin-bottom: 10px;">We'll verify the business information you provided</li>
+                                <li style="margin-bottom: 10px;">Once approved, your business will appear on ProWasl.com</li>
+                                <li style="margin-bottom: 10px;">You'll receive another email when your listing goes live insha'Allah</li>
+                            </ul>
+
+                            <div style="background-color: #eff6ff; padding: 20px; border-radius: 8px; margin: 30px 0;">
+                                <p style="margin: 0 0 10px; color: #1e40af; font-size: 15px; font-weight: 600;">
+                                    💡 In the meantime...
+                                </p>
+                                <p style="margin: 0; color: #1e3a8a; font-size: 14px; line-height: 1.6;">
+                                    Help us grow! Share ProWasl with other Muslim business owners in your network. The stronger our directory, the better we can serve our community.
+                                </p>
+                            </div>
+
+                            <p style="margin: 30px 0 0; color: #4b5563; font-size: 15px; line-height: 1.6;">
+                                Questions? Just reply to this email - I read every message!
+                            </p>
+
+                            <p style="margin: 20px 0 0; color: #4b5563; font-size: 15px; line-height: 1.6;">
+                                BarakAllahu feek,<br>
+                                <strong style="color: #1f2937;">{self.from_name}</strong>
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f9fafb; padding: 30px; text-align: center; border-top: 1px solid #e5e7eb;">
+                            <p style="margin: 0 0 10px; color: #6b7280; font-size: 13px;">
+                                ProWasl - Connecting Muslims with Halal Businesses
+                            </p>
+                            <p style="margin: 0; color: #9ca3af; font-size: 12px;">
+                                This email was sent because you submitted a business claim at claim.prowasl.com
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+"""
+
+            # Plain text version
+            text_content = f"""
+As-salamu alaykum {owner_name},
+
+JazakAllah khair for submitting {business_name} to ProWasl!
+
+CLAIM ID: {claim_id}
+
+What happens next?
+- Our team will review your submission (usually within 24-48 hours)
+- We'll verify the business information you provided
+- Once approved, your business will appear on ProWasl.com
+- You'll receive another email when your listing goes live insha'Allah
+
+In the meantime, help us grow! Share ProWasl with other Muslim business owners in your network.
+
+Questions? Just reply to this email - I read every message!
+
+BarakAllahu feek,
+{self.from_name}
+
+---
+ProWasl - Connecting Muslims with Halal Businesses
+This email was sent because you submitted a business claim at claim.prowasl.com
+"""
+
+            # Create the message
+            message = Mail(
+                from_email=Email(self.from_email, self.from_name),
+                to_emails=To(to_email),
+                subject=subject,
+                plain_text_content=Content("text/plain", text_content),
+                html_content=Content("text/html", html_content)
+            )
+
+            # Set reply-to
+            message.reply_to = Email(self.reply_to)
+
+            # Send the email
+            response = self.client.send(message)
+
+            if response.status_code in [200, 201, 202]:
+                logger.info(f"Confirmation email sent to {to_email} for claim {claim_id}")
+                return True
+            else:
+                logger.error(f"Failed to send email. Status: {response.status_code}, Body: {response.body}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error sending confirmation email: {e}")
+            return False
+
+
+# Singleton instance
+email_service = EmailService()
