@@ -564,6 +564,28 @@ async def submit_business_claim(
                 detail=f"State must be one of: {', '.join(valid_states)}"
             )
 
+        # Validate phone numbers before processing
+        normalized_owner_phone = normalize_phone(claim.owner_phone)
+        normalized_business_phone = normalize_phone(claim.business_phone)
+        normalized_business_whatsapp = normalize_phone(claim.business_whatsapp)
+
+        # If a phone was provided but failed validation, reject it
+        if claim.owner_phone and not normalized_owner_phone:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid owner phone number. Please enter a valid 10-digit US phone number."
+            )
+        if claim.business_phone and not normalized_business_phone:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid business phone number. Please enter a valid 10-digit US phone number."
+            )
+        if claim.business_whatsapp and not normalized_business_whatsapp:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid WhatsApp number. Please enter a valid 10-digit US phone number."
+            )
+
         # Insert claim into database
         insert_query = text("""
             INSERT INTO business_claim_submissions (
@@ -587,11 +609,11 @@ async def submit_business_claim(
             RETURNING claim_id, short_claim_id
         """)
 
-        # Normalize phone numbers before inserting
+        # Insert with already-normalized phone numbers
         result = await db.execute(insert_query, {
             'owner_name': claim.owner_name,
             'owner_email': claim.owner_email,
-            'owner_phone': normalize_phone(claim.owner_phone),
+            'owner_phone': normalized_owner_phone,
             'business_name': claim.business_name,
             'business_city': claim.business_city,
             'business_state': claim.business_state.upper(),
@@ -599,8 +621,8 @@ async def submit_business_claim(
             'business_zip': claim.business_zip,
             'business_industry': claim.business_industry,
             'business_website': claim.business_website,
-            'business_phone': normalize_phone(claim.business_phone),
-            'business_whatsapp': normalize_phone(claim.business_whatsapp),
+            'business_phone': normalized_business_phone,
+            'business_whatsapp': normalized_business_whatsapp,
             'business_description': claim.business_description,
             'muslim_owned': claim.muslim_owned,
             'submitted_from': claim.submitted_from
