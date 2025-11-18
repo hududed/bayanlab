@@ -22,9 +22,46 @@ from ..common.config import get_settings
 from ..common.logger import get_logger
 from ..common.models import EventsResponse, BusinessesResponse, MetricsResponse, EventAPI, BusinessAPI, Address, Venue, Organizer
 from .email_service import email_service
+import re
+import phonenumbers
+from phonenumbers import NumberParseException
 
 settings = get_settings()
 logger = get_logger("api_service")
+
+
+def normalize_phone(phone: Optional[str]) -> Optional[str]:
+    """
+    Normalize and validate phone number to US format (10 digits)
+    - Uses Google's phonenumbers library for robust validation
+    - Accepts any US phone format: (970) 231-0576, +1-970-231-0576, etc.
+    - Returns 10-digit US phone number or None if invalid
+    """
+    if not phone:
+        return None
+
+    try:
+        # Parse as US phone number
+        parsed = phonenumbers.parse(phone, "US")
+
+        # Validate it's a valid number
+        if not phonenumbers.is_valid_number(parsed):
+            logger.warning(f"Invalid phone number: {phone}")
+            return None
+
+        # Format as national number (10 digits only)
+        national_number = str(parsed.national_number)
+
+        # Ensure it's exactly 10 digits
+        if len(national_number) != 10:
+            logger.warning(f"Phone number not 10 digits: {national_number} (original: {phone})")
+            return None
+
+        return national_number
+
+    except NumberParseException as e:
+        logger.warning(f"Failed to parse phone number '{phone}': {e}")
+        return None
 
 
 # Pydantic models for business claim
@@ -550,10 +587,11 @@ async def submit_business_claim(
             RETURNING claim_id, short_claim_id
         """)
 
+        # Normalize phone numbers before inserting
         result = await db.execute(insert_query, {
             'owner_name': claim.owner_name,
             'owner_email': claim.owner_email,
-            'owner_phone': claim.owner_phone,
+            'owner_phone': normalize_phone(claim.owner_phone),
             'business_name': claim.business_name,
             'business_city': claim.business_city,
             'business_state': claim.business_state.upper(),
@@ -561,8 +599,8 @@ async def submit_business_claim(
             'business_zip': claim.business_zip,
             'business_industry': claim.business_industry,
             'business_website': claim.business_website,
-            'business_phone': claim.business_phone,
-            'business_whatsapp': claim.business_whatsapp,
+            'business_phone': normalize_phone(claim.business_phone),
+            'business_whatsapp': normalize_phone(claim.business_whatsapp),
             'business_description': claim.business_description,
             'muslim_owned': claim.muslim_owned,
             'submitted_from': claim.submitted_from
@@ -577,13 +615,26 @@ async def submit_business_claim(
         logger.info(f"Business claim submitted: {short_claim_id} ({claim_id}) - {claim.business_name} by {claim.owner_email}")
 
         # Send confirmation email (non-blocking - don't fail if email fails)
+        email_sent = False
         try:
-            await email_service.send_claim_confirmation(
+            email_sent = await email_service.send_claim_confirmation(
                 to_email=claim.owner_email,
                 owner_name=claim.owner_name,
                 business_name=claim.business_name,
                 claim_id=short_claim_id
             )
+
+            # Mark email as sent if successful
+            if email_sent:
+                update_query = text("""
+                    UPDATE business_claim_submissions
+                    SET confirmation_email_sent = TRUE,
+                        confirmation_email_sent_at = NOW()
+                    WHERE claim_id = :claim_id
+                """)
+                await db.execute(update_query, {'claim_id': claim_id})
+                await db.commit()
+
         except Exception as email_error:
             logger.error(f"Failed to send confirmation email: {email_error}")
             # Continue anyway - don't fail the claim submission if email fails
