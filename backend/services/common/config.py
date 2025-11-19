@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     google_places_api_key: str | None = None
     google_custom_search_api_key: str | None = None
     google_custom_search_engine_id: str | None = None
+    google_geocoding_api_key: str | None = None
 
     # Neon database (production)
     neon_db_url: str | None = None
@@ -44,7 +45,7 @@ class Settings(BaseSettings):
     # SendGrid Email
     sendgrid_api_key: str | None = None
     sendgrid_from_email: str = "info@prowasl.com"
-    sendgrid_from_name: str = "Hud from ProWasl"
+    sendgrid_from_name: str = "ProWasl Team"
     sendgrid_reply_to: str = "info@prowasl.com"
 
     # Region (default for V1)

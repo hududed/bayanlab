@@ -45,16 +45,29 @@ Key technical decisions for BayanLab Backbone.
 
 ---
 
-## ADR-004: Nominatim Geocoding
+## ADR-004: Geocoding Provider Abstraction
 **Date:** Nov 2025 | **Status:** Accepted
 
-**Decision:** Use Nominatim (OpenStreetMap) for geocoding.
+**Decision:** Use provider abstraction with three options: OpenStreetMap (default), Google, or Hybrid.
 
-**Rationale:** Free, good US accuracy, no vendor lock-in.
+**Rationale:**
+- OpenStreetMap Nominatim is free, good US accuracy (10-50m of Google), no API key needed
+- Google Geocoding API offers best accuracy but requires billing ($5/1000 requests)
+- Hybrid approach tries Google first, falls back to OSM for reliability
+- Easy migration via `GEOCODING_PROVIDER` environment variable
 
-**Consequences:**  
-✅ Free, no vendor lock-in  
-❌ Rate limited (1 req/sec) - cache aggressively
+**Implementation:**
+- Location: `backend/services/common/geocoding.py`
+- Providers: `OpenStreetMapGeocoder`, `GoogleGeocoder`, `HybridGeocoder`
+- Factory: `get_geocoder()` controlled by env var
+- Migration path: `osm` (default) → `hybrid` → `google`
+
+**Consequences:**
+✅ Free default (OSM), no vendor lock-in
+✅ Easy migration to Google when billing enabled
+✅ Hybrid mode provides best of both worlds
+❌ OSM rate limited (1 req/sec) - cache aggressively
+❌ Google requires billing setup
 
 ---
 
@@ -295,6 +308,79 @@ If Google Places API unavailable:
 - **50% of all revenue donated to masjids** (ongoing sadaqah jariyah)
 
 **See:** [ENIGMA_INSPIRED_ROADMAP.md](ENIGMA_INSPIRED_ROADMAP.md) for complete technical specification
+
+---
+
+## ADR-017: Short Claim IDs
+**Date:** Nov 2025 | **Status:** Accepted
+
+**Context:** Business claim submissions need user-friendly identifiers for emails and communication. Full UUIDs are too long and difficult to communicate.
+
+**Decision:** Implement short claim ID system with format `PRW-XXXXX`:
+- Prefix: `PRW` (ProWasl)
+- 5-character random suffix (uppercase alphanumeric)
+- Excludes confusing characters (0, O, I, 1)
+- Collision detection with retry logic
+
+**Implementation:**
+- Added `short_claim_id` column to `business_claim_submissions`
+- Generated on claim submission
+- Used in email templates and admin interface
+- Examples: `PRW-HB2DL`, `PRW-CYMH6`, `PRW-6WSYE`
+
+**Consequences:**
+✅ User-friendly identifiers for support and communication
+✅ Short enough for emails and verbal communication
+✅ Collision-resistant (36^5 = 60M+ combinations)
+❌ Not globally unique (prefix tied to ProWasl project)
+
+---
+
+## ADR-018: SendGrid Email Integration
+**Date:** Nov 2025 | **Status:** Accepted
+
+**Context:** Business claim portal needs professional email confirmations for submissions.
+
+**Decision:** Integrate SendGrid for transactional emails:
+- Confirmation email on claim submission
+- Dynamic templates for professional formatting
+- Sender: `noreply@prowasl.com`
+
+**Implementation:**
+- Configuration: `SENDGRID_API_KEY` environment variable
+- Template management: SendGrid dashboard
+- Email includes: business name, short claim ID, submission details
+
+**Consequences:**
+✅ Professional email confirmations
+✅ Reliable delivery tracking
+✅ Template management via SendGrid UI
+❌ Dependency on external service
+❌ Cost scales with volume (free tier: 100 emails/day)
+
+---
+
+## ADR-019: Phone Number Normalization
+**Date:** Nov 2025 | **Status:** Accepted
+
+**Context:** Business submissions have inconsistent phone number formats, making validation and storage difficult.
+
+**Decision:** Normalize all phone numbers to E.164 format before storage:
+- Strip all non-digit characters
+- Add `+1` prefix for US numbers (10 digits)
+- Validate length before storage
+
+**Implementation:**
+Applied to fields:
+- `business_phone`
+- `business_whatsapp`
+- `owner_phone`
+
+**Consequences:**
+✅ Consistent storage format
+✅ Easy validation and comparison
+✅ Ready for international expansion
+❌ Assumes US numbers (+1) by default
 
 ---
 
