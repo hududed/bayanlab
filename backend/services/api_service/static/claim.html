@@ -204,7 +204,7 @@
 
             <div class="form-group">
                 <label>Industry <span class="required">*</span></label>
-                <select name="business_industry" required>
+                <select name="business_industry" id="business_industry" required>
                     <option value="">Select your industry...</option>
                     <option value="Construction & Home Services">Construction & Home Services</option>
                     <option value="Consulting">Consulting</option>
@@ -219,6 +219,15 @@
                     <option value="Marketing & Design">Marketing & Design</option>
                     <option value="Other">Other</option>
                 </select>
+            </div>
+
+            <div class="form-group" id="other_industry_group" style="display: none;">
+                <label>Please specify your industry <span class="required">*</span></label>
+                <input type="text" name="business_industry_other" id="business_industry_other"
+                       placeholder="e.g., Halal certification, Heavy equipment sales, etc.">
+                <small style="color: #666; display: block; margin-top: 4px;">
+                    Be as specific as possible to help us categorize your business correctly.
+                </small>
             </div>
 
             <div class="form-group">
@@ -284,6 +293,22 @@
             });
         });
 
+        // Handle "Other" industry selection
+        const industrySelect = document.getElementById('business_industry');
+        const otherIndustryGroup = document.getElementById('other_industry_group');
+        const otherIndustryInput = document.getElementById('business_industry_other');
+
+        industrySelect.addEventListener('change', function() {
+            if (this.value === 'Other') {
+                otherIndustryGroup.style.display = 'block';
+                otherIndustryInput.required = true;
+            } else {
+                otherIndustryGroup.style.display = 'none';
+                otherIndustryInput.required = false;
+                otherIndustryInput.value = '';  // Clear the field when hidden
+            }
+        });
+
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
 
@@ -307,6 +332,7 @@
                 business_street_address: formData.get('business_street_address') || null,
                 business_zip: formData.get('business_zip') || null,
                 business_industry: formData.get('business_industry') || null,
+                business_industry_other: formData.get('business_industry_other') || null,
                 business_website: formData.get('business_website') || null,
                 business_phone: formData.get('business_phone') || null,
                 business_whatsapp: formData.get('business_whatsapp') || null,
@@ -332,6 +358,10 @@
                 // Success!
                 successMsg.style.display = 'block';
                 form.reset();
+
+                // Hide the "Other" industry field after reset
+                otherIndustryGroup.style.display = 'none';
+                otherIndustryInput.required = false;
 
                 // Scroll to top
                 window.scrollTo({ top: 0, behavior: 'smooth' });

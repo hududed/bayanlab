@@ -75,6 +75,7 @@ class BusinessClaimRequest(BaseModel):
     business_street_address: Optional[str] = None
     business_zip: Optional[str] = None
     business_industry: Optional[str] = None
+    business_industry_other: Optional[str] = None  # NEW: Specify industry if "Other"
     business_website: Optional[str] = None
     business_phone: Optional[str] = None
     business_whatsapp: Optional[str] = None
@@ -92,6 +93,7 @@ class BusinessSyncData(BaseModel):
     business_id: str
     business_name: str
     business_industry: Optional[str] = None
+    business_industry_other: Optional[str] = None  # Specified industry if "Other"
     business_description: Optional[str] = None
     business_website: Optional[str] = None
     business_address: Optional[str] = None  # Street address only
@@ -597,7 +599,7 @@ async def submit_business_claim(
                 owner_name, owner_email, owner_phone,
                 business_name, business_city, business_state,
                 business_street_address, business_zip,
-                business_industry, business_website,
+                business_industry, business_industry_other, business_website,
                 business_phone, business_whatsapp,
                 business_description,
                 muslim_owned, submitted_from, submitted_at, status
@@ -606,7 +608,7 @@ async def submit_business_claim(
                 :owner_name, :owner_email, :owner_phone,
                 :business_name, :business_city, :business_state,
                 :business_street_address, :business_zip,
-                :business_industry, :business_website,
+                :business_industry, :business_industry_other, :business_website,
                 :business_phone, :business_whatsapp,
                 :business_description,
                 :muslim_owned, :submitted_from, NOW(), 'pending'
@@ -625,6 +627,7 @@ async def submit_business_claim(
             'business_street_address': claim.business_street_address,
             'business_zip': claim.business_zip,
             'business_industry': claim.business_industry,
+            'business_industry_other': claim.business_industry_other,
             'business_website': claim.business_website,
             'business_phone': normalized_business_phone,
             'business_whatsapp': normalized_business_whatsapp,
@@ -714,6 +717,7 @@ async def sync_businesses(
                 claim_id::text as business_id,
                 business_name,
                 business_industry,
+                business_industry_other,
                 business_description,
                 business_website,
                 business_street_address as business_address,
@@ -778,6 +782,7 @@ async def sync_businesses(
                 'business_id': row.business_id,
                 'business_name': row.business_name,
                 'business_industry': row.business_industry,
+                'business_industry_other': row.business_industry_other,
                 'business_description': row.business_description,
                 'business_website': row.business_website,
                 'business_address': row.business_address,
