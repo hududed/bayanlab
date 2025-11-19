@@ -94,11 +94,10 @@ class BusinessSyncData(BaseModel):
     business_industry: Optional[str] = None
     business_description: Optional[str] = None
     business_website: Optional[str] = None
+    business_address: Optional[str] = None  # Street address only
     business_city: str
     business_state: str
-    business_street_address: Optional[str] = None
     business_zip: Optional[str] = None
-    business_full_address: Optional[str] = None  # Computed field
     business_phone: Optional[str] = None
     business_whatsapp: Optional[str] = None
     latitude: Optional[float] = None
@@ -717,11 +716,10 @@ async def sync_businesses(
                 business_industry,
                 business_description,
                 business_website,
+                business_street_address as business_address,
                 business_city,
                 business_state,
-                business_street_address,
                 business_zip,
-                business_full_address,
                 business_phone,
                 business_whatsapp,
                 latitude,
@@ -782,11 +780,10 @@ async def sync_businesses(
                 'business_industry': row.business_industry,
                 'business_description': row.business_description,
                 'business_website': row.business_website,
+                'business_address': row.business_address,
                 'business_city': row.business_city,
                 'business_state': row.business_state,
-                'business_street_address': row.business_street_address,
                 'business_zip': row.business_zip,
-                'business_full_address': row.business_full_address,
                 'business_phone': row.business_phone,
                 'business_whatsapp': row.business_whatsapp,
                 'latitude': float(row.latitude) if row.latitude else None,
