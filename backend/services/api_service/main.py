@@ -166,11 +166,17 @@ async def root():
 @app.get("/favicon.png")
 async def favicon():
     """
-    Serve favicon
+    Serve favicon with cache control headers
     """
     favicon_path = Path(__file__).parent / "static" / "favicon.png"
     if favicon_path.exists():
-        return FileResponse(str(favicon_path))
+        return FileResponse(
+            str(favicon_path),
+            headers={
+                "Cache-Control": "public, max-age=3600",  # Cache for 1 hour instead of forever
+                "ETag": str(favicon_path.stat().st_mtime)  # Use file modification time as ETag
+            }
+        )
     # Return 204 No Content if favicon doesn't exist
     return JSONResponse(status_code=204, content=None)
 
