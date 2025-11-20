@@ -716,8 +716,13 @@ async def get_business_counter(
         count = count_row.count if count_row else 0
 
         # Dynamic goal scaling with custom milestones
-        # 25 → 50 → 100 → 200 → 400...
-        if count < 25:
+        # 10 → 25 → 50 → 100 → 200 → 400...
+        if count < 10:
+            goal = 10
+            title = "🚀 Founding 10 Businesses"
+            message = f"{count} / {goal} listed"
+            subtitle = "Join the early cohort before we open public search."
+        elif count < 25:
             goal = 25
             title = "🚀 Founding 25 Businesses"
             message = f"{count} / {goal} listed"
