@@ -682,6 +682,84 @@ async def submit_business_claim(
         raise HTTPException(status_code=500, detail="Failed to submit claim. Please try again.")
 
 
+class BusinessCounterResponse(BaseModel):
+    count: int
+    goal: int
+    percentage: float
+    title: str
+    message: str
+    subtitle: str
+
+
+@app.get("/v1/businesses/counter", response_model=BusinessCounterResponse)
+@limiter.limit("120/minute")
+async def get_business_counter(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get live business counter with dynamic goal scaling
+
+    Goal doubles automatically: 10 → 20 → 40 → 80 → 160
+    Returns current count, goal, percentage, and display message
+    """
+    try:
+        # Count approved businesses
+        count_query = """
+            SELECT COUNT(*) as count
+            FROM business_claim_submissions
+            WHERE status = 'approved'
+        """
+
+        result = await db.execute(text(count_query))
+        count_row = result.fetchone()
+        count = count_row.count if count_row else 0
+
+        # Dynamic goal scaling with custom milestones
+        # 25 → 50 → 100 → 200 → 400...
+        if count < 25:
+            goal = 25
+            title = "🚀 Founding 25 Businesses"
+            message = f"{count} / {goal} listed"
+            subtitle = "Join the early cohort before we open public search."
+        elif count < 50:
+            goal = 50
+            title = "🌐 Colorado Launch Group — 50 Listings"
+            message = f"{count} / {goal} listed"
+            subtitle = "Launching Colorado local search soon. Add your business to be included."
+        elif count < 100:
+            goal = 100
+            title = "🌙 Ramadan Discovery Wave — 100+ Listings"
+            message = f"{count} / {goal} listed"
+            subtitle = "Building a nationwide list of trusted Muslim-owned & halal-friendly services for Ramadan."
+        else:
+            # After 100, double each time: 200, 400, 800...
+            goal = 100
+            while count >= goal:
+                goal *= 2
+            title = "🌍 Nationwide Directory"
+            message = f"{count} / {goal} businesses listed"
+            subtitle = "Growing the largest directory of Muslim-owned businesses."
+
+        # Calculate percentage
+        percentage = round((count / goal) * 100, 1) if goal > 0 else 0
+
+        logger.info(f"Business counter: {count}/{goal} ({percentage}%) - {title}")
+
+        return BusinessCounterResponse(
+            count=count,
+            goal=goal,
+            percentage=percentage,
+            title=title,
+            message=message,
+            subtitle=subtitle
+        )
+
+    except Exception as e:
+        logger.error(f"Error in business counter endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch business counter")
+
+
 @app.get("/v1/businesses/sync", response_model=BusinessSyncResponse)
 @limiter.limit("60/minute")
 async def sync_businesses(
