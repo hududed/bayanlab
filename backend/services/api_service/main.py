@@ -144,6 +144,8 @@ class HalalEateriesResponse(BaseModel):
     version: str = "1.0"
     region: str
     count: int
+    total: Optional[int] = None  # Total available (shown in demo mode)
+    access_tier: str = "full"  # "demo" or "full"
     items: List[HalalEateryAPI]
 
 
@@ -971,6 +973,10 @@ async def get_halal_eateries(
     Discovery API for established halal restaurants, cafes, and food trucks.
     Data sourced from community directories (Colorado Halal, Zabihah, etc.)
 
+    **Access Tiers:**
+    - **Demo (no API key)**: 5 sample rows, redacted contact info (phone/website hidden)
+    - **Full (with API key)**: All data, full contact details
+
     **Halal Status:**
     - `validated`: Confirmed halal by community directory
     - `likely_halal`: AI-identified, not yet confirmed
@@ -983,6 +989,36 @@ async def get_halal_eateries(
     - `favorites_only`: Return only community favorites
     """
     try:
+        # Check API key for tiered access
+        api_key = request.headers.get("X-API-Key")
+        expected_key = settings.prowasl_api_key  # Reuse existing key for now
+        is_demo_mode = not api_key or api_key != expected_key
+
+        # Demo mode limits (like Enigma: 20 preview rows)
+        DEMO_LIMIT = 10
+
+        # First, get total count for the query (before pagination)
+        count_sql = """
+        SELECT COUNT(*) FROM halal_eateries WHERE region = :region
+        """
+        count_params = {'region': region}
+
+        if city:
+            count_sql += " AND LOWER(address_city) = LOWER(:city)"
+            count_params['city'] = city
+        if cuisine:
+            count_sql += " AND LOWER(cuisine_style) LIKE LOWER(:cuisine)"
+            count_params['cuisine'] = f"%{cuisine}%"
+        if halal_status:
+            count_sql += " AND halal_status = :halal_status"
+            count_params['halal_status'] = halal_status
+        if favorites_only:
+            count_sql += " AND is_favorite = true"
+
+        count_result = await db.execute(text(count_sql), count_params)
+        total_count = count_result.scalar() or 0
+
+        # Build main query
         query_sql = """
         SELECT
             eatery_id, name, cuisine_style,
@@ -994,7 +1030,15 @@ async def get_halal_eateries(
         WHERE region = :region
         """
 
-        params = {'region': region, 'limit': limit, 'offset': offset}
+        # In demo mode: ignore pagination params, force limit to DEMO_LIMIT
+        if is_demo_mode:
+            effective_limit = DEMO_LIMIT
+            effective_offset = 0
+        else:
+            effective_limit = limit
+            effective_offset = offset
+
+        params = {'region': region, 'limit': effective_limit, 'offset': effective_offset}
 
         if city:
             query_sql += " AND LOWER(address_city) = LOWER(:city)"
@@ -1024,6 +1068,13 @@ async def get_halal_eateries(
              halal_status_val, is_favorite, is_food_truck, is_carry_out_only,
              is_cafe_bakery, has_many_locations, source, google_place_id, updated_at) = row
 
+            # In demo mode: redact contact info and operational details (like Enigma)
+            if is_demo_mode:
+                phone = None
+                website = None
+                hours_raw = None
+                google_place_id = None
+
             eatery = HalalEateryAPI(
                 eatery_id=str(eatery_id),
                 name=name,
@@ -1052,11 +1103,15 @@ async def get_halal_eateries(
             )
             items.append(eatery)
 
-        logger.info(f"Served {len(items)} halal eateries for region {region}")
+        access_tier = "demo" if is_demo_mode else "full"
+        logger.info(f"Served {len(items)} halal eateries for region {region} (tier: {access_tier}, total: {total_count})")
+
         return HalalEateriesResponse(
             version="1.0",
             region=region,
             count=len(items),
+            total=total_count if is_demo_mode else None,  # Show total in demo mode to tease
+            access_tier=access_tier,
             items=items
         )
 
