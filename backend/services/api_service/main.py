@@ -563,14 +563,6 @@ async def submit_business_claim(
     Allows business owners to add their business to the directory
     """
     try:
-        # Validate state (for now, allow CO and common states)
-        valid_states = ['CO', 'TX', 'CA', 'NY', 'IL', 'MI', 'FL', 'WA', 'AZ', 'GA']
-        if claim.business_state.upper() not in valid_states:
-            raise HTTPException(
-                status_code=400,
-                detail=f"State must be one of: {', '.join(valid_states)}"
-            )
-
         # Validate phone numbers before processing
         normalized_owner_phone = normalize_phone(claim.owner_phone)
         normalized_business_phone = normalize_phone(claim.business_phone)
