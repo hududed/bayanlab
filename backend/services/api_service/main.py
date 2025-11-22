@@ -117,6 +117,36 @@ class BusinessSyncData(BaseModel):
     updated_at: str
 
 
+# Pydantic models for halal eateries
+class HalalEateryAPI(BaseModel):
+    eatery_id: str
+    name: str
+    cuisine_style: Optional[str] = None
+    address: Address
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    phone: Optional[str] = None
+    website: Optional[str] = None
+    hours_raw: Optional[str] = None
+    google_rating: Optional[float] = None
+    halal_status: str  # 'validated', 'likely_halal', 'unverified'
+    is_favorite: bool = False
+    is_food_truck: bool = False
+    is_carry_out_only: bool = False
+    is_cafe_bakery: bool = False
+    has_many_locations: bool = False
+    source: str
+    google_place_id: Optional[str] = None
+    updated_at: datetime
+
+
+class HalalEateriesResponse(BaseModel):
+    version: str = "1.0"
+    region: str
+    count: int
+    items: List[HalalEateryAPI]
+
+
 class BusinessSyncResponse(BaseModel):
     businesses: List[BusinessSyncData]
     pagination: Dict[str, Any]
@@ -125,11 +155,29 @@ class BusinessSyncResponse(BaseModel):
 # Initialize FastAPI
 app = FastAPI(
     title="BayanLab Community Data Backbone API",
-    description="Read-only API for community events and Muslim-owned/halal businesses",
+    description="""
+Read-only API for community events, Muslim-owned businesses, and halal eateries.
+
+## Endpoints
+
+- **Events**: Community events from masjids and Islamic centers
+- **Businesses**: Muslim-owned businesses (ProWasl integration)
+- **Halal Eateries**: Halal restaurants, cafes, and food trucks
+
+## Authentication
+
+Most endpoints are public. Business sync requires API key authentication.
+""",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
-    openapi_url="/openapi.json"
+    openapi_url="/openapi.json",
+    openapi_tags=[
+        {"name": "Events", "description": "Community events from masjids"},
+        {"name": "Businesses", "description": "Muslim-owned businesses for ProWasl"},
+        {"name": "Halal Eateries", "description": "Halal restaurants and food establishments"},
+        {"name": "Metrics", "description": "Platform metrics and counters"},
+    ]
 )
 
 # Mount static files (for claim form)
@@ -275,7 +323,7 @@ bayanlab_businesses_total {businesses_count}
         )
 
 
-@app.get("/v1/events", response_model=EventsResponse)
+@app.get("/v1/events", response_model=EventsResponse, tags=["Events"])
 @limiter.limit("100/minute")
 async def get_events(
     request: Request,
@@ -370,7 +418,7 @@ async def get_events(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.get("/v1/businesses", response_model=BusinessesResponse)
+@app.get("/v1/businesses", response_model=BusinessesResponse, tags=["Businesses"])
 @limiter.limit("100/minute")
 async def get_businesses(
     request: Request,
@@ -469,7 +517,7 @@ async def get_businesses(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.get("/v1/metrics", response_model=MetricsResponse)
+@app.get("/v1/metrics", response_model=MetricsResponse, tags=["Metrics"])
 @limiter.limit("100/minute")
 async def get_metrics(
     request: Request,
@@ -551,7 +599,7 @@ async def serve_claim_form():
     return FileResponse(str(static_path))
 
 
-@app.post("/v1/businesses/claim", response_model=BusinessClaimResponse)
+@app.post("/v1/businesses/claim", response_model=BusinessClaimResponse, tags=["Businesses"])
 @limiter.limit("10/minute")
 async def submit_business_claim(
     request: Request,
@@ -683,7 +731,7 @@ class BusinessCounterResponse(BaseModel):
     subtitle: str
 
 
-@app.get("/v1/businesses/counter", response_model=BusinessCounterResponse)
+@app.get("/v1/businesses/counter", response_model=BusinessCounterResponse, tags=["Businesses"])
 @limiter.limit("120/minute")
 async def get_business_counter(
     request: Request,
@@ -757,7 +805,7 @@ async def get_business_counter(
         raise HTTPException(status_code=500, detail="Failed to fetch business counter")
 
 
-@app.get("/v1/businesses/sync", response_model=BusinessSyncResponse)
+@app.get("/v1/businesses/sync", response_model=BusinessSyncResponse, tags=["Businesses"])
 @limiter.limit("60/minute")
 async def sync_businesses(
     request: Request,
@@ -898,6 +946,123 @@ async def sync_businesses(
     except Exception as e:
         logger.error(f"Error in sync endpoint: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Sync failed. Please try again.")
+
+
+# =============================================================================
+# Halal Eateries API (Discovery data for Ummah App)
+# =============================================================================
+
+@app.get("/v1/halal-eateries", response_model=HalalEateriesResponse, tags=["Halal Eateries"])
+@limiter.limit("100/minute")
+async def get_halal_eateries(
+    request: Request,
+    region: str = Query("CO", description="Region code (e.g., CO)"),
+    city: Optional[str] = Query(None, description="Filter by city"),
+    cuisine: Optional[str] = Query(None, description="Filter by cuisine style"),
+    halal_status: Optional[str] = Query(None, description="Filter by halal status: validated, likely_halal, unverified"),
+    favorites_only: bool = Query(False, description="Return only community favorites"),
+    limit: int = Query(100, ge=1, le=500, description="Maximum number of results"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get halal eateries for a region.
+
+    Discovery API for established halal restaurants, cafes, and food trucks.
+    Data sourced from community directories (Colorado Halal, Zabihah, etc.)
+
+    **Halal Status:**
+    - `validated`: Confirmed halal by community directory
+    - `likely_halal`: AI-identified, not yet confirmed
+    - `unverified`: Listed but not verified
+
+    **Filters:**
+    - `city`: Filter by city name (case-insensitive)
+    - `cuisine`: Filter by cuisine style (e.g., "Mediterranean", "Pakistani")
+    - `halal_status`: Filter by verification status
+    - `favorites_only`: Return only community favorites
+    """
+    try:
+        query_sql = """
+        SELECT
+            eatery_id, name, cuisine_style,
+            address_street, address_city, address_state, address_zip,
+            latitude, longitude, phone, website, hours_raw, google_rating,
+            halal_status, is_favorite, is_food_truck, is_carry_out_only,
+            is_cafe_bakery, has_many_locations, source, google_place_id, updated_at
+        FROM halal_eateries
+        WHERE region = :region
+        """
+
+        params = {'region': region, 'limit': limit, 'offset': offset}
+
+        if city:
+            query_sql += " AND LOWER(address_city) = LOWER(:city)"
+            params['city'] = city
+
+        if cuisine:
+            query_sql += " AND LOWER(cuisine_style) LIKE LOWER(:cuisine)"
+            params['cuisine'] = f"%{cuisine}%"
+
+        if halal_status:
+            query_sql += " AND halal_status = :halal_status"
+            params['halal_status'] = halal_status
+
+        if favorites_only:
+            query_sql += " AND is_favorite = true"
+
+        query_sql += " ORDER BY is_favorite DESC, google_rating DESC NULLS LAST, name ASC LIMIT :limit OFFSET :offset"
+
+        result = await db.execute(text(query_sql), params)
+        rows = result.fetchall()
+
+        items = []
+        for row in rows:
+            (eatery_id, name, cuisine_style,
+             address_street, address_city, address_state, address_zip,
+             latitude, longitude, phone, website, hours_raw, google_rating,
+             halal_status_val, is_favorite, is_food_truck, is_carry_out_only,
+             is_cafe_bakery, has_many_locations, source, google_place_id, updated_at) = row
+
+            eatery = HalalEateryAPI(
+                eatery_id=str(eatery_id),
+                name=name,
+                cuisine_style=cuisine_style,
+                address=Address(
+                    street=address_street,
+                    city=address_city,
+                    state=address_state,
+                    zip=address_zip
+                ),
+                latitude=float(latitude) if latitude else None,
+                longitude=float(longitude) if longitude else None,
+                phone=phone,
+                website=website,
+                hours_raw=hours_raw,
+                google_rating=float(google_rating) if google_rating else None,
+                halal_status=halal_status_val,
+                is_favorite=is_favorite,
+                is_food_truck=is_food_truck,
+                is_carry_out_only=is_carry_out_only,
+                is_cafe_bakery=is_cafe_bakery,
+                has_many_locations=has_many_locations,
+                source=source,
+                google_place_id=google_place_id,
+                updated_at=updated_at
+            )
+            items.append(eatery)
+
+        logger.info(f"Served {len(items)} halal eateries for region {region}")
+        return HalalEateriesResponse(
+            version="1.0",
+            region=region,
+            count=len(items),
+            items=items
+        )
+
+    except Exception as e:
+        logger.error(f"Error fetching halal eateries: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 if __name__ == "__main__":
