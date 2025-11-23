@@ -1181,6 +1181,128 @@ async def get_halal_eateries(
 
 
 # =============================================================================
+# Halal Markets API (Grocery stores, butchers, wholesale)
+# =============================================================================
+
+@app.get("/v1/halal-markets", response_model=HalalMarketsResponse, tags=["Halal Eateries"])
+@limiter.limit("100/minute")
+async def get_halal_markets(
+    request: Request,
+    region: str = Query("CO", description="Region code (e.g., CO)"),
+    city: Optional[str] = Query(None, description="Filter by city"),
+    category: Optional[str] = Query(None, description="Filter by category: grocery, butcher, wholesale"),
+    limit: int = Query(100, ge=1, le=500, description="Maximum number of results"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get halal markets for a region.
+
+    Grocery stores, butcher shops, and wholesale suppliers with halal products.
+
+    **Categories:**
+    - `grocery`: General halal grocery stores
+    - `butcher`: Halal meat shops
+    - `wholesale`: Wholesale suppliers (e.g., Restaurant Depot)
+
+    **Access Tiers:**
+    - **Demo (no API key)**: 5 sample rows, redacted contact info
+    - **Full (with API key)**: All data, full contact details
+    """
+    try:
+        api_key = request.headers.get("X-API-Key")
+        expected_key = settings.prowasl_api_key
+        is_demo_mode = not api_key or api_key != expected_key
+        DEMO_LIMIT = 5
+
+        # Get total count
+        count_sql = "SELECT COUNT(*) FROM halal_markets WHERE region = :region"
+        count_params = {'region': region}
+        if city:
+            count_sql += " AND LOWER(address_city) = LOWER(:city)"
+            count_params['city'] = city
+        if category:
+            count_sql += " AND category = :category"
+            count_params['category'] = category
+
+        count_result = await db.execute(text(count_sql), count_params)
+        total_count = count_result.scalar() or 0
+
+        # Build query
+        query_sql = """
+        SELECT market_id, name, category, address_street, address_city, address_state, address_zip,
+               latitude, longitude, phone, website, hours_raw, google_rating, halal_status,
+               has_butcher, has_deli, sells_turkey, source, google_place_id, updated_at
+        FROM halal_markets WHERE region = :region
+        """
+
+        if is_demo_mode:
+            effective_limit = DEMO_LIMIT
+            effective_offset = 0
+        else:
+            effective_limit = limit
+            effective_offset = offset
+
+        params = {'region': region, 'limit': effective_limit, 'offset': effective_offset}
+
+        if city:
+            query_sql += " AND LOWER(address_city) = LOWER(:city)"
+            params['city'] = city
+        if category:
+            query_sql += " AND category = :category"
+            params['category'] = category
+
+        query_sql += " ORDER BY google_rating DESC NULLS LAST, name ASC LIMIT :limit OFFSET :offset"
+
+        result = await db.execute(text(query_sql), params)
+        rows = result.fetchall()
+
+        items = []
+        for row in rows:
+            (market_id, name, cat, street, mcity, state, zip_code, lat, lng, phone, website,
+             hours, rating, status, has_butcher, has_deli, sells_turkey, source, gplace, updated) = row
+
+            if is_demo_mode:
+                phone, website, hours, gplace = None, None, None, None
+
+            items.append(HalalMarketAPI(
+                market_id=str(market_id),
+                name=name,
+                category=cat,
+                address=Address(street=street, city=mcity, state=state, zip=zip_code),
+                latitude=float(lat) if lat else None,
+                longitude=float(lng) if lng else None,
+                phone=phone,
+                website=website,
+                hours_raw=hours,
+                google_rating=float(rating) if rating else None,
+                halal_status=status,
+                has_butcher=has_butcher or False,
+                has_deli=has_deli or False,
+                sells_turkey=sells_turkey or False,
+                source=source,
+                google_place_id=gplace,
+                updated_at=updated
+            ))
+
+        access_tier = "demo" if is_demo_mode else "full"
+        logger.info(f"Served {len(items)} halal markets for region {region} (tier: {access_tier}, total: {total_count})")
+
+        return HalalMarketsResponse(
+            version="1.0",
+            region=region,
+            count=len(items),
+            total=total_count if is_demo_mode else None,
+            access_tier=access_tier,
+            items=items
+        )
+
+    except Exception as e:
+        logger.error(f"Error fetching halal markets: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# =============================================================================
 # Halal Places API (Combined: Eateries + Markets for apps like Ummah)
 # =============================================================================
 
