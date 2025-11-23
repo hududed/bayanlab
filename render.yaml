@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: bayanlab-claim-portal
+    name: bayanlab-api
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: free

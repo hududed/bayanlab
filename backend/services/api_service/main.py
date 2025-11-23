@@ -480,49 +480,79 @@ async def get_events(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.get("/v1/businesses", response_model=BusinessesResponse, tags=["Businesses"])
+@app.get("/v1/businesses", tags=["Businesses"])
 @limiter.limit("100/minute")
 async def get_businesses(
     request: Request,
-    region: str = Query("CO", description="Region code (e.g., CO, US-CA, MY)"),
-    category: Optional[str] = Query(None, description="Filter by category"),
+    region: str = Query("CO", description="Region/state code (e.g., CO)"),
+    category: Optional[str] = Query(None, description="Filter by industry/category"),
     city: Optional[str] = Query(None, description="Filter by city"),
-    updated_since: Optional[datetime] = Query(None, description="Return businesses updated since this timestamp"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of results"),
+    limit: int = Query(100, ge=1, le=500, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Get businesses for a region
+    Get Muslim-owned businesses for a region.
+
+    Returns approved business claims from claim.prowasl.com.
+
+    **Access Tiers:**
+    - **Demo (no API key)**: 5 sample rows, redacted contact info
+    - **Full (with API key)**: All data, full contact details
     """
     try:
-        # Build query
+        # Check API key for tiered access
+        api_key = request.headers.get("X-API-Key")
+        expected_key = settings.prowasl_api_key
+        is_demo_mode = not api_key or api_key != expected_key
+        DEMO_LIMIT = 5
+
+        # Get total count
+        count_sql = """
+        SELECT COUNT(*) FROM business_claim_submissions
+        WHERE status = 'approved' AND business_state = :region
+        """
+        count_params = {'region': region}
+        if city:
+            count_sql += " AND LOWER(business_city) = LOWER(:city)"
+            count_params['city'] = city
+        if category:
+            count_sql += " AND business_industry = :category"
+            count_params['category'] = category
+
+        count_result = await db.execute(text(count_sql), count_params)
+        total_count = count_result.scalar() or 0
+
+        # Build query for approved claims
         query_sql = """
         SELECT
-            business_id, name, category,
-            address_street, address_city, address_state, address_zip,
-            latitude, longitude, website, phone, email,
-            self_identified_muslim_owned, halal_certified, certifier_name, certifier_ref,
-            placekey, source, source_ref, region, updated_at
-        FROM business_canonical
-        WHERE region = :region
+            claim_id, business_name, business_industry, business_industry_other,
+            business_street_address, business_city, business_state, business_zip,
+            latitude, longitude, business_phone, business_whatsapp, business_website,
+            business_description, muslim_owned, submitted_at
+        FROM business_claim_submissions
+        WHERE status = 'approved' AND business_state = :region
         """
 
-        params = {'region': region, 'limit': limit, 'offset': offset}
-
-        if category:
-            query_sql += " AND category = :category"
-            params['category'] = category
+        params = {'region': region}
 
         if city:
-            query_sql += " AND LOWER(address_city) = LOWER(:city)"
+            query_sql += " AND LOWER(business_city) = LOWER(:city)"
             params['city'] = city
 
-        if updated_since:
-            query_sql += " AND updated_at >= :updated_since"
-            params['updated_since'] = updated_since
+        if category:
+            query_sql += " AND business_industry = :category"
+            params['category'] = category
 
-        query_sql += " ORDER BY updated_at DESC, business_id LIMIT :limit OFFSET :offset"
+        query_sql += " ORDER BY submitted_at DESC"
+
+        # Apply limits based on access tier
+        if is_demo_mode:
+            query_sql += f" LIMIT {DEMO_LIMIT}"
+        else:
+            query_sql += " LIMIT :limit OFFSET :offset"
+            params['limit'] = limit
+            params['offset'] = offset
 
         # Execute query
         result = await db.execute(text(query_sql), params)
@@ -531,48 +561,51 @@ async def get_businesses(
         # Build response
         items = []
         for row in rows:
-            (business_id, name, category,
-             address_street, address_city, address_state, address_zip,
-             latitude, longitude, website, phone, email,
-             self_identified_muslim_owned, halal_certified, certifier_name, certifier_ref,
-             placekey, source, source_ref, region, updated_at) = row
+            (claim_id, name, industry, industry_other,
+             street, city_name, state, zip_code,
+             lat, lng, phone, whatsapp, website,
+             description, muslim_owned, submitted_at) = row
 
-            business = BusinessAPI(
-                business_id=business_id,
-                name=name,
-                category=category,
-                address=Address(
-                    street=address_street,
-                    city=address_city,
-                    state=address_state,
-                    zip=address_zip
-                ),
-                latitude=latitude,
-                longitude=longitude,
-                website=website,
-                phone=phone,
-                email=email,
-                self_identified_muslim_owned=self_identified_muslim_owned,
-                halal_certified=halal_certified,
-                certifier_name=certifier_name,
-                certifier_ref=certifier_ref,
-                placekey=placekey,
-                source=source,
-                source_ref=source_ref,
-                region=region,
-                updated_at=updated_at
-            )
-            items.append(business)
+            # Redact contact info in demo mode
+            if is_demo_mode:
+                phone = None
+                whatsapp = None
+                website = None
 
-        response = BusinessesResponse(
-            version="1.0",
-            region=region,
-            count=len(items),
-            items=items
-        )
+            # Use industry_other if industry is "Other"
+            display_category = industry_other if industry == "Other" and industry_other else industry
 
-        logger.info(f"Served {len(items)} businesses for region {region}")
-        return response
+            items.append({
+                "business_id": str(claim_id),
+                "name": name,
+                "category": display_category,
+                "address": {
+                    "street": street,
+                    "city": city_name,
+                    "state": state,
+                    "zip_code": zip_code
+                },
+                "latitude": float(lat) if lat else None,
+                "longitude": float(lng) if lng else None,
+                "phone": phone,
+                "whatsapp": whatsapp,
+                "website": website,
+                "description": description,
+                "muslim_owned": muslim_owned,
+                "updated_at": submitted_at.isoformat() if submitted_at else None
+            })
+
+        response = {
+            "version": "1.0",
+            "region": region,
+            "count": len(items),
+            "total": total_count if is_demo_mode else None,
+            "access_tier": "demo" if is_demo_mode else "full",
+            "items": items
+        }
+
+        logger.info(f"Served {len(items)} businesses for region {region} (demo={is_demo_mode})")
+        return JSONResponse(content=response)
 
     except Exception as e:
         logger.error(f"Error fetching businesses: {e}")

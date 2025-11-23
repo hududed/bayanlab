@@ -44,11 +44,31 @@ curl "http://localhost:8000/v1/events?region=CO"
 # Businesses (ProWasl)
 curl "http://localhost:8000/v1/businesses?region=CO"
 
-# Halal Eateries (Ummah App)
+# Halal Eateries (restaurants, cafes, food trucks)
 curl "http://localhost:8000/v1/halal-eateries?region=CO"
+
+# Halal Markets (grocery stores, butchers, wholesale)
+curl "http://localhost:8000/v1/halal-markets?region=CO"
+
+# Halal Places (combined eateries + markets for apps like Ummah)
+curl "http://localhost:8000/v1/halal-places?region=CO"
 
 # Metrics
 curl "http://localhost:8000/v1/metrics"
+```
+
+### Tiered Access (Halal APIs)
+
+Halal endpoints support demo/full access tiers:
+- **Demo (no API key)**: Limited rows, redacted contact info (phone/website hidden)
+- **Full (with API key)**: All data with full contact details
+
+```bash
+# Demo mode (default)
+curl "http://localhost:8000/v1/halal-eateries?region=CO"
+
+# Full access
+curl -H "X-API-Key: your-key" "http://localhost:8000/v1/halal-eateries?region=CO"
 ```
 
 ## Project Structure
@@ -65,6 +85,26 @@ bayanlab/
 ├── seed/                # Sample data
 ├── docs/                # Documentation
 └── exports/             # Generated JSON files
+```
+
+## Testing
+
+```bash
+# Start local API server (connects to Neon)
+export DATABASE_URL='postgresql+asyncpg://...@neon.tech/neondb?ssl=require'
+uv run uvicorn backend.services.api_service.main:app --host 127.0.0.1 --port 8100 &
+
+# Run all tests
+uv run pytest backend/tests/ -v
+
+# Run halal API tests only
+uv run pytest backend/tests/e2e/test_halal_api.py -v
+
+# Run specific test class
+uv run pytest backend/tests/e2e/test_halal_api.py::TestHalalEateriesAPI -v
+
+# Run only demo mode tests
+uv run pytest backend/tests/e2e/test_halal_api.py -v -k "demo"
 ```
 
 ## Documentation
