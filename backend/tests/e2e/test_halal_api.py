@@ -36,8 +36,9 @@ class TestHalalEateriesAPI:
         data = response.json()
         assert data["access_tier"] == "demo"
         assert data["count"] <= 10
-        assert data["total"] is not None  # Total should be shown in demo mode
-        assert data["total"] >= data["count"]
+        # Total only shown if there's more data than displayed (teaser)
+        if data["total"] is not None:
+            assert data["total"] > data["count"]
 
     def test_demo_mode_redacts_contact_info(self, client: httpx.Client):
         """Demo mode should redact phone, website, hours, google_place_id."""
@@ -124,7 +125,9 @@ class TestHalalMarketsAPI:
         data = response.json()
         assert data["access_tier"] == "demo"
         assert data["count"] <= 5
-        assert data["total"] is not None
+        # Total only shown if there's more data than displayed (teaser)
+        if data["total"] is not None:
+            assert data["total"] > data["count"]
 
     def test_demo_mode_redacts_contact_info(self, client: httpx.Client):
         """Demo mode should redact contact info for markets."""
@@ -175,7 +178,9 @@ class TestHalalPlacesAPI:
         data = response.json()
         assert data["access_tier"] == "demo"
         assert data["count"] <= 10
-        assert data["total"] is not None
+        # Total only shown if there's more data than displayed (teaser)
+        if data["total"] is not None:
+            assert data["total"] > data["count"]
 
     def test_includes_both_eateries_and_markets(self, client: httpx.Client):
         """Combined endpoint should include both place types."""

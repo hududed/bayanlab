@@ -595,11 +595,14 @@ async def get_businesses(
                 "updated_at": submitted_at.isoformat() if submitted_at else None
             })
 
+        # Only show total if there's more data than what we're showing (teaser)
+        show_total = is_demo_mode and total_count > len(items)
+
         response = {
             "version": "1.0",
             "region": region,
             "count": len(items),
-            "total": total_count if is_demo_mode else None,
+            "total": total_count if show_total else None,
             "access_tier": "demo" if is_demo_mode else "full",
             "items": items
         }
@@ -1197,13 +1200,15 @@ async def get_halal_eateries(
             items.append(eatery)
 
         access_tier = "demo" if is_demo_mode else "full"
+        # Only show total if there's more data than what we're showing (teaser)
+        show_total = is_demo_mode and total_count > len(items)
         logger.info(f"Served {len(items)} halal eateries for region {region} (tier: {access_tier}, total: {total_count})")
 
         return HalalEateriesResponse(
             version="1.0",
             region=region,
             count=len(items),
-            total=total_count if is_demo_mode else None,  # Show total in demo mode to tease
+            total=total_count if show_total else None,
             access_tier=access_tier,
             items=items
         )
@@ -1319,13 +1324,15 @@ async def get_halal_markets(
             ))
 
         access_tier = "demo" if is_demo_mode else "full"
+        # Only show total if there's more data than what we're showing (teaser)
+        show_total = is_demo_mode and total_count > len(items)
         logger.info(f"Served {len(items)} halal markets for region {region} (tier: {access_tier}, total: {total_count})")
 
         return HalalMarketsResponse(
             version="1.0",
             region=region,
             count=len(items),
-            total=total_count if is_demo_mode else None,
+            total=total_count if show_total else None,
             access_tier=access_tier,
             items=items
         )
@@ -1441,13 +1448,15 @@ async def get_halal_places(
             items = items[offset:offset + limit]
 
         access_tier = "demo" if is_demo_mode else "full"
+        # Only show total if there's more data than what we're showing (teaser)
+        show_total = is_demo_mode and total_count > len(items)
         logger.info(f"Served {len(items)} halal places for region {region} (tier: {access_tier}, eateries: {eateries_count}, markets: {markets_count})")
 
         return HalalPlacesResponse(
             version="1.0",
             region=region,
             count=len(items),
-            total=total_count if is_demo_mode else None,
+            total=total_count if show_total else None,
             access_tier=access_tier,
             eateries_count=eateries_count,
             markets_count=markets_count,
