@@ -149,6 +149,66 @@ class HalalEateriesResponse(BaseModel):
     items: List[HalalEateryAPI]
 
 
+# Pydantic models for halal markets
+class HalalMarketAPI(BaseModel):
+    market_id: str
+    name: str
+    category: str  # 'grocery', 'butcher', 'wholesale'
+    address: Address
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    phone: Optional[str] = None
+    website: Optional[str] = None
+    hours_raw: Optional[str] = None
+    google_rating: Optional[float] = None
+    halal_status: str = "validated"
+    has_butcher: bool = False
+    has_deli: bool = False
+    sells_turkey: bool = False
+    source: str
+    google_place_id: Optional[str] = None
+    updated_at: datetime
+
+
+class HalalMarketsResponse(BaseModel):
+    version: str = "1.0"
+    region: str
+    count: int
+    total: Optional[int] = None
+    access_tier: str = "full"
+    items: List[HalalMarketAPI]
+
+
+# Combined halal places (eateries + markets)
+class HalalPlaceAPI(BaseModel):
+    place_id: str
+    place_type: str  # 'eatery' or 'market'
+    name: str
+    category: Optional[str] = None  # cuisine_style for eateries, category for markets
+    address: Address
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    phone: Optional[str] = None
+    website: Optional[str] = None
+    hours_raw: Optional[str] = None
+    google_rating: Optional[float] = None
+    halal_status: str
+    source: str
+    google_place_id: Optional[str] = None
+    updated_at: datetime
+
+
+class HalalPlacesResponse(BaseModel):
+    version: str = "1.0"
+    region: str
+    count: int
+    total: Optional[int] = None
+    access_tier: str = "full"
+    eateries_count: int = 0
+    markets_count: int = 0
+    items: List[HalalPlaceAPI]
+
+
 class BusinessSyncResponse(BaseModel):
     businesses: List[BusinessSyncData]
     pagination: Dict[str, Any]
@@ -1117,6 +1177,130 @@ async def get_halal_eateries(
 
     except Exception as e:
         logger.error(f"Error fetching halal eateries: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# =============================================================================
+# Halal Places API (Combined: Eateries + Markets for apps like Ummah)
+# =============================================================================
+
+@app.get("/v1/halal-places", response_model=HalalPlacesResponse, tags=["Halal Eateries"])
+@limiter.limit("100/minute")
+async def get_halal_places(
+    request: Request,
+    region: str = Query("CO", description="Region code (e.g., CO)"),
+    city: Optional[str] = Query(None, description="Filter by city"),
+    place_type: Optional[str] = Query(None, description="Filter by type: eatery, market, or all (default)"),
+    limit: int = Query(100, ge=1, le=500, description="Maximum number of results"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get all halal places (eateries + markets) for a region.
+
+    Combined API for apps that need both restaurants and grocery stores.
+    Ideal for apps like Ummah that show all halal food sources.
+
+    **Place Types:**
+    - `eatery`: Restaurants, cafes, food trucks
+    - `market`: Grocery stores, butchers, wholesale
+
+    **Access Tiers:**
+    - **Demo (no API key)**: 10 sample rows, redacted contact info
+    - **Full (with API key)**: All data, full contact details
+    """
+    try:
+        api_key = request.headers.get("X-API-Key")
+        expected_key = settings.prowasl_api_key
+        is_demo_mode = not api_key or api_key != expected_key
+        DEMO_LIMIT = 10
+
+        items = []
+        eateries_count = 0
+        markets_count = 0
+
+        # Query eateries
+        if not place_type or place_type in ('eatery', 'all'):
+            eatery_sql = """
+            SELECT eatery_id, name, cuisine_style, address_street, address_city, address_state, address_zip,
+                   latitude, longitude, phone, website, hours_raw, google_rating, halal_status, source, google_place_id, updated_at
+            FROM halal_eateries WHERE region = :region
+            """
+            eatery_params = {'region': region}
+            if city:
+                eatery_sql += " AND LOWER(address_city) = LOWER(:city)"
+                eatery_params['city'] = city
+            eatery_sql += " ORDER BY google_rating DESC NULLS LAST"
+
+            result = await db.execute(text(eatery_sql), eatery_params)
+            for row in result.fetchall():
+                (eid, name, cuisine, street, ecity, state, zip_code, lat, lng, phone, website, hours, rating, status, source, gplace, updated) = row
+                if is_demo_mode:
+                    phone, website, hours, gplace = None, None, None, None
+                items.append(HalalPlaceAPI(
+                    place_id=str(eid), place_type="eatery", name=name, category=cuisine,
+                    address=Address(street=street, city=ecity, state=state, zip=zip_code),
+                    latitude=float(lat) if lat else None, longitude=float(lng) if lng else None,
+                    phone=phone, website=website, hours_raw=hours,
+                    google_rating=float(rating) if rating else None, halal_status=status,
+                    source=source, google_place_id=gplace, updated_at=updated
+                ))
+            eateries_count = len(items)
+
+        # Query markets
+        if not place_type or place_type in ('market', 'all'):
+            market_sql = """
+            SELECT market_id, name, category, address_street, address_city, address_state, address_zip,
+                   latitude, longitude, phone, website, hours_raw, google_rating, halal_status, source, google_place_id, updated_at
+            FROM halal_markets WHERE region = :region
+            """
+            market_params = {'region': region}
+            if city:
+                market_sql += " AND LOWER(address_city) = LOWER(:city)"
+                market_params['city'] = city
+            market_sql += " ORDER BY google_rating DESC NULLS LAST"
+
+            result = await db.execute(text(market_sql), market_params)
+            for row in result.fetchall():
+                (mid, name, cat, street, mcity, state, zip_code, lat, lng, phone, website, hours, rating, status, source, gplace, updated) = row
+                if is_demo_mode:
+                    phone, website, hours, gplace = None, None, None, None
+                items.append(HalalPlaceAPI(
+                    place_id=str(mid), place_type="market", name=name, category=cat,
+                    address=Address(street=street, city=mcity, state=state, zip=zip_code),
+                    latitude=float(lat) if lat else None, longitude=float(lng) if lng else None,
+                    phone=phone, website=website, hours_raw=hours,
+                    google_rating=float(rating) if rating else None, halal_status=status,
+                    source=source, google_place_id=gplace, updated_at=updated
+                ))
+            markets_count = len(items) - eateries_count
+
+        # Sort combined by rating
+        items.sort(key=lambda x: (x.google_rating or 0), reverse=True)
+        total_count = len(items)
+
+        # Apply demo limit or pagination
+        if is_demo_mode:
+            items = items[:DEMO_LIMIT]
+        else:
+            items = items[offset:offset + limit]
+
+        access_tier = "demo" if is_demo_mode else "full"
+        logger.info(f"Served {len(items)} halal places for region {region} (tier: {access_tier}, eateries: {eateries_count}, markets: {markets_count})")
+
+        return HalalPlacesResponse(
+            version="1.0",
+            region=region,
+            count=len(items),
+            total=total_count if is_demo_mode else None,
+            access_tier=access_tier,
+            eateries_count=eateries_count,
+            markets_count=markets_count,
+            items=items
+        )
+
+    except Exception as e:
+        logger.error(f"Error fetching halal places: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
