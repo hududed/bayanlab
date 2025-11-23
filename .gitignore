@@ -64,3 +64,6 @@ docker-compose.override.yml
 backend/data/
 exports/
 .vercel
+
+# Seed data 
+seed/

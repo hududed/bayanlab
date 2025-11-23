@@ -209,6 +209,39 @@ class HalalPlacesResponse(BaseModel):
     items: List[HalalPlaceAPI]
 
 
+# Masajid (Mosques) models
+class MasjidAPI(BaseModel):
+    masjid_id: str
+    name: str
+    address: Address
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    phone: Optional[str] = None
+    website: Optional[str] = None
+    email: Optional[str] = None
+    denomination: Optional[str] = None
+    languages: Optional[str] = None
+    has_womens_section: bool = True
+    has_parking: bool = True
+    has_wudu_facilities: bool = True
+    offers_jumah: bool = True
+    offers_daily_prayers: bool = True
+    offers_quran_classes: Optional[bool] = None
+    offers_weekend_school: Optional[bool] = None
+    verification_status: str = "unverified"
+    source: str
+    updated_at: datetime
+
+
+class MasajidResponse(BaseModel):
+    version: str = "1.0"
+    region: str
+    count: int
+    total: Optional[int] = None
+    access_tier: str = "full"
+    items: List[MasjidAPI]
+
+
 class BusinessSyncResponse(BaseModel):
     businesses: List[BusinessSyncData]
     pagination: Dict[str, Any]
@@ -1465,6 +1498,125 @@ async def get_halal_places(
 
     except Exception as e:
         logger.error(f"Error fetching halal places: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# =============================================================================
+# Masajid (Mosques) API
+# =============================================================================
+
+@app.get("/v1/masajid", response_model=MasajidResponse, tags=["Masajid"])
+@limiter.limit("100/minute")
+async def get_masajid(
+    request: Request,
+    region: str = Query("CO", description="Region code (e.g., CO)"),
+    city: Optional[str] = Query(None, description="Filter by city"),
+    limit: int = Query(100, ge=1, le=500, description="Maximum number of results"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get masajid (mosques) for a region.
+
+    Returns Islamic centers and mosques with details about facilities and services.
+
+    **Access Tiers:**
+    - **Demo (no API key)**: 5 sample rows, redacted contact info
+    - **Full (with API key)**: All data, full contact details
+    """
+    try:
+        api_key = request.headers.get("X-API-Key")
+        expected_key = settings.prowasl_api_key
+        is_demo_mode = not api_key or api_key != expected_key
+        DEMO_LIMIT = 5
+
+        # Get total count - only verified masajid
+        count_sql = "SELECT COUNT(*) FROM masajid WHERE region = :region AND verification_status = 'verified'"
+        count_params = {'region': region}
+        if city:
+            count_sql += " AND LOWER(address_city) = LOWER(:city)"
+            count_params['city'] = city
+
+        count_result = await db.execute(text(count_sql), count_params)
+        total_count = count_result.scalar() or 0
+
+        # Build query - only verified masajid (excludes unverified entries without standalone locations)
+        query_sql = """
+        SELECT masjid_id, name, address_street, address_city, address_state, address_zip,
+               latitude, longitude, phone, website, email, denomination, languages,
+               has_womens_section, has_parking, has_wudu_facilities,
+               offers_jumah, offers_daily_prayers, offers_quran_classes, offers_weekend_school,
+               verification_status, source, updated_at
+        FROM masajid WHERE region = :region AND verification_status = 'verified'
+        """
+
+        if is_demo_mode:
+            effective_limit = DEMO_LIMIT
+            effective_offset = 0
+        else:
+            effective_limit = limit
+            effective_offset = offset
+
+        params = {'region': region, 'limit': effective_limit, 'offset': effective_offset}
+
+        if city:
+            query_sql += " AND LOWER(address_city) = LOWER(:city)"
+            params['city'] = city
+
+        query_sql += " ORDER BY name ASC LIMIT :limit OFFSET :offset"
+
+        result = await db.execute(text(query_sql), params)
+        rows = result.fetchall()
+
+        items = []
+        for row in rows:
+            (masjid_id, name, street, mcity, state, zip_code, lat, lng, phone, website, email,
+             denomination, languages, has_womens, has_parking, has_wudu,
+             offers_jumah, offers_daily, offers_quran, offers_school,
+             verification, source, updated) = row
+
+            if is_demo_mode:
+                phone, website, email = None, None, None
+
+            items.append(MasjidAPI(
+                masjid_id=str(masjid_id),
+                name=name,
+                address=Address(street=street, city=mcity, state=state, zip=zip_code),
+                latitude=float(lat) if lat else None,
+                longitude=float(lng) if lng else None,
+                phone=phone,
+                website=website,
+                email=email,
+                denomination=denomination,
+                languages=languages,
+                has_womens_section=has_womens if has_womens is not None else True,
+                has_parking=has_parking if has_parking is not None else True,
+                has_wudu_facilities=has_wudu if has_wudu is not None else True,
+                offers_jumah=offers_jumah if offers_jumah is not None else True,
+                offers_daily_prayers=offers_daily if offers_daily is not None else True,
+                offers_quran_classes=offers_quran,
+                offers_weekend_school=offers_school,
+                verification_status=verification or "unverified",
+                source=source,
+                updated_at=updated
+            ))
+
+        access_tier = "demo" if is_demo_mode else "full"
+        # Only show total if there's more data than what we're showing (teaser)
+        show_total = is_demo_mode and total_count > len(items)
+        logger.info(f"Served {len(items)} masajid for region {region} (tier: {access_tier}, total: {total_count})")
+
+        return MasajidResponse(
+            version="1.0",
+            region=region,
+            count=len(items),
+            total=total_count if show_total else None,
+            access_tier=access_tier,
+            items=items
+        )
+
+    except Exception as e:
+        logger.error(f"Error fetching masajid: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
