@@ -19,9 +19,6 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-GOOGLE_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY") or os.getenv("GOOGLE_GEOCODING_API_KEY")
-
-
 def display_claim(claim):
     """Display claim details in a formatted way"""
     print("\n" + "=" * 80)
@@ -75,20 +72,25 @@ def get_user_decision():
 
 
 def geocode_address(address: str) -> tuple[float, float] | None:
-    """Geocode address using Google Geocoding API"""
-    if not GOOGLE_API_KEY:
-        return None
-
-    url = "https://maps.googleapis.com/maps/api/geocode/json"
-    params = {"address": address, "key": GOOGLE_API_KEY}
+    """Geocode address using OSM Nominatim (free)"""
+    url = "https://nominatim.openstreetmap.org/search"
+    params = {
+        "q": address,
+        "format": "json",
+        "limit": 1
+    }
+    headers = {
+        "User-Agent": "BayanLab/1.0 (ProWasl Business Claims)"
+    }
 
     try:
-        response = httpx.get(url, params=params, timeout=10.0)
+        response = httpx.get(url, params=params, headers=headers, timeout=10.0)
         data = response.json()
 
-        if data.get("status") == "OK" and len(data.get("results", [])) > 0:
-            location = data["results"][0]["geometry"]["location"]
-            return (location["lat"], location["lng"])
+        if len(data) > 0:
+            lat = float(data[0]["lat"])
+            lon = float(data[0]["lon"])
+            return (lat, lon)
     except Exception as e:
         print(f"  ⚠️  Geocoding error: {e}")
 
@@ -97,9 +99,9 @@ def geocode_address(address: str) -> tuple[float, float] | None:
 
 def approve_claim(conn, claim_id, address):
     """Approve a claim and geocode it"""
-    # Geocode the address
+    # Geocode the address using OSM
     coords = None
-    if address and GOOGLE_API_KEY:
+    if address:
         print(f"  🌍 Geocoding: {address}")
         coords = geocode_address(address)
         if coords:
