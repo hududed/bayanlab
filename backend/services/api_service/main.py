@@ -219,7 +219,6 @@ class MasjidAPI(BaseModel):
     phone: Optional[str] = None
     website: Optional[str] = None
     email: Optional[str] = None
-    denomination: Optional[str] = None
     languages: Optional[str] = None
     has_womens_section: bool = True
     has_parking: bool = True
@@ -1543,7 +1542,7 @@ async def get_masajid(
         # Build query - only verified masajid (excludes unverified entries without standalone locations)
         query_sql = """
         SELECT masjid_id, name, address_street, address_city, address_state, address_zip,
-               latitude, longitude, phone, website, email, denomination, languages,
+               latitude, longitude, phone, website, email, languages,
                has_womens_section, has_parking, has_wudu_facilities,
                offers_jumah, offers_daily_prayers, offers_quran_classes, offers_weekend_school,
                verification_status, source, updated_at

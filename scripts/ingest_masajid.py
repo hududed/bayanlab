@@ -107,7 +107,6 @@ def ingest_masajid(csv_path: Path, dry_run: bool = False):
             row.get("phone") or None,
             row.get("website") or None,
             row.get("email") or None,
-            row.get("denomination") or None,
             row.get("languages") or None,
             parse_bool(row.get("has_womens_section")),
             parse_bool(row.get("has_parking")),
@@ -129,7 +128,7 @@ def ingest_masajid(csv_path: Path, dry_run: bool = False):
     insert_sql = """
         INSERT INTO masajid (
             name, address_street, address_city, address_state, address_zip,
-            latitude, longitude, phone, website, email, denomination, languages,
+            latitude, longitude, phone, website, email, languages,
             has_womens_section, has_parking, has_wudu_facilities,
             offers_jumah, offers_daily_prayers, offers_quran_classes, offers_weekend_school,
             region, source, notes,
@@ -144,7 +143,6 @@ def ingest_masajid(csv_path: Path, dry_run: bool = False):
             phone = COALESCE(EXCLUDED.phone, masajid.phone),
             website = COALESCE(EXCLUDED.website, masajid.website),
             email = COALESCE(EXCLUDED.email, masajid.email),
-            denomination = COALESCE(EXCLUDED.denomination, masajid.denomination),
             languages = COALESCE(EXCLUDED.languages, masajid.languages),
             has_womens_section = COALESCE(EXCLUDED.has_womens_section, masajid.has_womens_section),
             has_parking = COALESCE(EXCLUDED.has_parking, masajid.has_parking),
