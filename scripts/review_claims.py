@@ -7,6 +7,8 @@ import sys
 import os
 from pathlib import Path
 from datetime import datetime
+import httpx
+import time
 
 # Add backend to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -16,6 +18,8 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+GOOGLE_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY") or os.getenv("GOOGLE_GEOCODING_API_KEY")
 
 
 def display_claim(claim):
@@ -70,15 +74,63 @@ def get_user_decision():
             print("❌ Invalid choice. Please enter 'a', 'r', 's', or 'q'.")
 
 
-def approve_claim(conn, claim_id):
-    """Approve a claim"""
-    query = text("""
-        UPDATE business_claim_submissions
-        SET status = 'approved',
-            reviewed_at = NOW()
-        WHERE claim_id = :claim_id
-    """)
-    conn.execute(query, {'claim_id': str(claim_id)})
+def geocode_address(address: str) -> tuple[float, float] | None:
+    """Geocode address using Google Geocoding API"""
+    if not GOOGLE_API_KEY:
+        return None
+
+    url = "https://maps.googleapis.com/maps/api/geocode/json"
+    params = {"address": address, "key": GOOGLE_API_KEY}
+
+    try:
+        response = httpx.get(url, params=params, timeout=10.0)
+        data = response.json()
+
+        if data.get("status") == "OK" and len(data.get("results", [])) > 0:
+            location = data["results"][0]["geometry"]["location"]
+            return (location["lat"], location["lng"])
+    except Exception as e:
+        print(f"  ⚠️  Geocoding error: {e}")
+
+    return None
+
+
+def approve_claim(conn, claim_id, address):
+    """Approve a claim and geocode it"""
+    # Geocode the address
+    coords = None
+    if address and GOOGLE_API_KEY:
+        print(f"  🌍 Geocoding: {address}")
+        coords = geocode_address(address)
+        if coords:
+            print(f"  ✅ Geocoded: ({coords[0]:.6f}, {coords[1]:.6f})")
+        else:
+            print(f"  ⚠️  Geocoding failed - address may need manual correction")
+
+    # Update database
+    if coords:
+        query = text("""
+            UPDATE business_claim_submissions
+            SET status = 'approved',
+                reviewed_at = NOW(),
+                latitude = :lat,
+                longitude = :lng
+            WHERE claim_id = :claim_id
+        """)
+        conn.execute(query, {
+            'claim_id': str(claim_id),
+            'lat': coords[0],
+            'lng': coords[1]
+        })
+    else:
+        query = text("""
+            UPDATE business_claim_submissions
+            SET status = 'approved',
+                reviewed_at = NOW()
+            WHERE claim_id = :claim_id
+        """)
+        conn.execute(query, {'claim_id': str(claim_id)})
+
     conn.commit()
     print("\n✅ Claim APPROVED! Business will sync to ProWasl.")
 
@@ -159,8 +211,9 @@ def main():
                 decision = get_user_decision()
 
                 if decision == 'a':
-                    approve_claim(conn, claim_dict['claim_id'])
+                    approve_claim(conn, claim_dict['claim_id'], claim_dict['business_full_address'])
                     approved_count += 1
+                    time.sleep(0.2)  # Rate limit geocoding API
                 elif decision == 'r':
                     reject_claim(conn, claim_dict['claim_id'])
                     rejected_count += 1

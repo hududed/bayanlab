@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     sendgrid_from_email: str = "info@prowasl.com"
     sendgrid_from_name: str = "ProWasl Team"
     sendgrid_reply_to: str = "info@prowasl.com"
+    admin_email: str | None = None  # Email for admin notifications (claim submissions, etc.)
 
     # Region (default for V1)
     default_region: str = "CO"

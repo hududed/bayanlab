@@ -19,6 +19,7 @@ class EmailService:
         self.from_email = settings.sendgrid_from_email
         self.from_name = settings.sendgrid_from_name
         self.reply_to = settings.sendgrid_reply_to
+        self.admin_email = settings.admin_email  # Add admin email from config
 
         if not self.api_key:
             logger.warning("SENDGRID_API_KEY not set - email sending will be disabled")
@@ -195,6 +196,94 @@ This email was sent because you submitted a business claim at claim.prowasl.com
 
         except Exception as e:
             logger.error(f"Error sending confirmation email: {e}")
+            return False
+
+    async def send_admin_notification(
+        self,
+        business_name: str,
+        owner_name: str,
+        owner_email: str,
+        city: str,
+        state: str,
+        claim_id: str
+    ) -> bool:
+        """
+        Send notification to admin when a new business claim is submitted
+
+        Returns:
+            True if email was sent successfully, False otherwise
+        """
+        if not self.enabled or not self.admin_email:
+            logger.warning("Admin notification disabled - no admin email configured")
+            return False
+
+        try:
+            subject = f"🔔 New Business Claim: {business_name}"
+
+            html_content = f"""
+<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5;">
+    <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; padding: 30px;">
+        <h2 style="color: #1f2937; margin-top: 0;">🔔 New Business Claim Submitted</h2>
+
+        <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; font-weight: bold; font-size: 18px; color: #047857;">{business_name}</p>
+            <p style="margin: 5px 0 0; color: #065f46;">{city}, {state}</p>
+        </div>
+
+        <h3 style="color: #1f2937;">Owner Details</h3>
+        <ul style="color: #4b5563; line-height: 1.8;">
+            <li><strong>Name:</strong> {owner_name}</li>
+            <li><strong>Email:</strong> {owner_email}</li>
+            <li><strong>Claim ID:</strong> <code>{claim_id}</code></li>
+        </ul>
+
+        <div style="background: #eff6ff; padding: 15px; border-radius: 6px; margin-top: 25px;">
+            <p style="margin: 0; color: #1e40af; font-weight: 600;">👉 Action Required</p>
+            <p style="margin: 10px 0 0; color: #1e3a8a; font-size: 14px;">
+                Run <code>uv run python scripts/review_claims.py</code> to review and approve this claim.
+            </p>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+            text_content = f"""
+New Business Claim Submitted
+
+Business: {business_name}
+Location: {city}, {state}
+
+Owner Details:
+- Name: {owner_name}
+- Email: {owner_email}
+- Claim ID: {claim_id}
+
+Action Required:
+Run 'uv run python scripts/review_claims.py' to review and approve this claim.
+"""
+
+            message = Mail(
+                from_email=Email(self.from_email, "ProWasl Claims"),
+                to_emails=To(self.admin_email),
+                subject=subject,
+                plain_text_content=Content("text/plain", text_content),
+                html_content=Content("text/html", html_content)
+            )
+
+            response = self.client.send(message)
+
+            if response.status_code in [200, 201, 202]:
+                logger.info(f"Admin notification sent for claim {claim_id}")
+                return True
+            else:
+                logger.error(f"Failed to send admin notification. Status: {response.status_code}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error sending admin notification: {e}")
             return False
 
 

@@ -839,6 +839,20 @@ async def submit_business_claim(
             logger.error(f"Failed to send confirmation email: {email_error}")
             # Continue anyway - don't fail the claim submission if email fails
 
+        # Send admin notification (non-blocking - don't fail if email fails)
+        try:
+            await email_service.send_admin_notification(
+                business_name=claim.business_name,
+                owner_name=claim.owner_name,
+                owner_email=claim.owner_email,
+                city=claim.business_city,
+                state=claim.business_state,
+                claim_id=short_claim_id
+            )
+        except Exception as admin_email_error:
+            logger.error(f"Failed to send admin notification: {admin_email_error}")
+            # Continue anyway - don't fail the claim submission if admin email fails
+
         return BusinessClaimResponse(
             claim_id=short_claim_id,
             message="Thank you! Your business has been submitted for review."
