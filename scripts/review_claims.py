@@ -84,7 +84,7 @@ def geocode_address(address: str) -> tuple[float, float] | None:
     }
 
     try:
-        response = httpx.get(url, params=params, headers=headers, timeout=10.0)
+        response = httpx.get(url, params=params, headers=headers, timeout=30.0)
         data = response.json()
 
         if len(data) > 0:
@@ -213,9 +213,18 @@ def main():
                 decision = get_user_decision()
 
                 if decision == 'a':
-                    approve_claim(conn, claim_dict['claim_id'], claim_dict['business_full_address'])
+                    # Build full address from components
+                    address_parts = [
+                        claim_dict.get('business_street_address'),
+                        claim_dict.get('business_city'),
+                        claim_dict.get('business_state'),
+                        claim_dict.get('business_zip')
+                    ]
+                    full_address = ', '.join(filter(None, address_parts))
+
+                    approve_claim(conn, claim_dict['claim_id'], full_address)
                     approved_count += 1
-                    time.sleep(0.2)  # Rate limit geocoding API
+                    time.sleep(1.0)  # Rate limit OSM API (max 1 req/sec)
                 elif decision == 'r':
                     reject_claim(conn, claim_dict['claim_id'])
                     rejected_count += 1
