@@ -158,7 +158,6 @@ class EventsResponse(BaseModel):
     """Events API response"""
     version: str = "1.0"
     region: str
-    count: int
     items: list[EventAPI]
 
 
@@ -166,7 +165,6 @@ class BusinessesResponse(BaseModel):
     """Businesses API response"""
     version: str = "1.0"
     region: str
-    count: int
     items: list[BusinessAPI]
 
 

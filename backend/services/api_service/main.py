@@ -143,8 +143,6 @@ class HalalEateryAPI(BaseModel):
 class HalalEateriesResponse(BaseModel):
     version: str = "1.0"
     region: str
-    count: int
-    total: Optional[int] = None  # Total available (shown in demo mode)
     access_tier: str = "full"  # "demo" or "full"
     items: List[HalalEateryAPI]
 
@@ -173,8 +171,6 @@ class HalalMarketAPI(BaseModel):
 class HalalMarketsResponse(BaseModel):
     version: str = "1.0"
     region: str
-    count: int
-    total: Optional[int] = None
     access_tier: str = "full"
     items: List[HalalMarketAPI]
 
@@ -201,11 +197,7 @@ class HalalPlaceAPI(BaseModel):
 class HalalPlacesResponse(BaseModel):
     version: str = "1.0"
     region: str
-    count: int
-    total: Optional[int] = None
     access_tier: str = "full"
-    eateries_count: int = 0
-    markets_count: int = 0
     items: List[HalalPlaceAPI]
 
 
@@ -235,8 +227,6 @@ class MasjidAPI(BaseModel):
 class MasajidResponse(BaseModel):
     version: str = "1.0"
     region: str
-    count: int
-    total: Optional[int] = None
     access_tier: str = "full"
     items: List[MasjidAPI]
 
@@ -500,7 +490,6 @@ async def get_events(
         response = EventsResponse(
             version="1.0",
             region=region,
-            count=len(items),
             items=items
         )
 
@@ -538,22 +527,6 @@ async def get_businesses(
         expected_key = settings.prowasl_api_key
         is_demo_mode = not api_key or api_key != expected_key
         DEMO_LIMIT = 5
-
-        # Get total count
-        count_sql = """
-        SELECT COUNT(*) FROM business_claim_submissions
-        WHERE status = 'approved' AND business_state = :region
-        """
-        count_params = {'region': region}
-        if city:
-            count_sql += " AND LOWER(business_city) = LOWER(:city)"
-            count_params['city'] = city
-        if category:
-            count_sql += " AND business_industry = :category"
-            count_params['category'] = category
-
-        count_result = await db.execute(text(count_sql), count_params)
-        total_count = count_result.scalar() or 0
 
         # Build query for approved claims
         query_sql = """
@@ -627,14 +600,9 @@ async def get_businesses(
                 "updated_at": submitted_at.isoformat() if submitted_at else None
             })
 
-        # Only show total if there's more data than what we're showing (teaser)
-        show_total = is_demo_mode and total_count > len(items)
-
         response = {
             "version": "1.0",
             "region": region,
-            "count": len(items),
-            "total": total_count if show_total else None,
             "access_tier": "demo" if is_demo_mode else "full",
             "items": items
         }
@@ -1139,27 +1107,6 @@ async def get_halal_eateries(
         # Demo mode limits (like Enigma: 20 preview rows)
         DEMO_LIMIT = 10
 
-        # First, get total count for the query (before pagination)
-        count_sql = """
-        SELECT COUNT(*) FROM halal_eateries WHERE region = :region
-        """
-        count_params = {'region': region}
-
-        if city:
-            count_sql += " AND LOWER(address_city) = LOWER(:city)"
-            count_params['city'] = city
-        if cuisine:
-            count_sql += " AND LOWER(cuisine_style) LIKE LOWER(:cuisine)"
-            count_params['cuisine'] = f"%{cuisine}%"
-        if halal_status:
-            count_sql += " AND halal_status = :halal_status"
-            count_params['halal_status'] = halal_status
-        if favorites_only:
-            count_sql += " AND is_favorite = true"
-
-        count_result = await db.execute(text(count_sql), count_params)
-        total_count = count_result.scalar() or 0
-
         # Build main query
         query_sql = """
         SELECT
@@ -1246,15 +1193,11 @@ async def get_halal_eateries(
             items.append(eatery)
 
         access_tier = "demo" if is_demo_mode else "full"
-        # Only show total if there's more data than what we're showing (teaser)
-        show_total = is_demo_mode and total_count > len(items)
-        logger.info(f"Served {len(items)} halal eateries for region {region} (tier: {access_tier}, total: {total_count})")
+        logger.info(f"Served {len(items)} halal eateries for region {region} (tier: {access_tier})")
 
         return HalalEateriesResponse(
             version="1.0",
             region=region,
-            count=len(items),
-            total=total_count if show_total else None,
             access_tier=access_tier,
             items=items
         )
@@ -1298,19 +1241,6 @@ async def get_halal_markets(
         expected_key = settings.prowasl_api_key
         is_demo_mode = not api_key or api_key != expected_key
         DEMO_LIMIT = 5
-
-        # Get total count
-        count_sql = "SELECT COUNT(*) FROM halal_markets WHERE region = :region"
-        count_params = {'region': region}
-        if city:
-            count_sql += " AND LOWER(address_city) = LOWER(:city)"
-            count_params['city'] = city
-        if category:
-            count_sql += " AND category = :category"
-            count_params['category'] = category
-
-        count_result = await db.execute(text(count_sql), count_params)
-        total_count = count_result.scalar() or 0
 
         # Build query
         query_sql = """
@@ -1370,15 +1300,11 @@ async def get_halal_markets(
             ))
 
         access_tier = "demo" if is_demo_mode else "full"
-        # Only show total if there's more data than what we're showing (teaser)
-        show_total = is_demo_mode and total_count > len(items)
-        logger.info(f"Served {len(items)} halal markets for region {region} (tier: {access_tier}, total: {total_count})")
+        logger.info(f"Served {len(items)} halal markets for region {region} (tier: {access_tier})")
 
         return HalalMarketsResponse(
             version="1.0",
             region=region,
-            count=len(items),
-            total=total_count if show_total else None,
             access_tier=access_tier,
             items=items
         )
@@ -1424,8 +1350,6 @@ async def get_halal_places(
         DEMO_LIMIT = 10
 
         items = []
-        eateries_count = 0
-        markets_count = 0
 
         # Query eateries
         if not place_type or place_type in ('eatery', 'all'):
@@ -1453,7 +1377,6 @@ async def get_halal_places(
                     google_rating=float(rating) if rating else None, halal_status=status,
                     source=source, google_place_id=gplace, updated_at=updated
                 ))
-            eateries_count = len(items)
 
         # Query markets
         if not place_type or place_type in ('market', 'all'):
@@ -1481,11 +1404,9 @@ async def get_halal_places(
                     google_rating=float(rating) if rating else None, halal_status=status,
                     source=source, google_place_id=gplace, updated_at=updated
                 ))
-            markets_count = len(items) - eateries_count
 
         # Sort combined by rating
         items.sort(key=lambda x: (x.google_rating or 0), reverse=True)
-        total_count = len(items)
 
         # Apply demo limit or pagination
         if is_demo_mode:
@@ -1494,18 +1415,12 @@ async def get_halal_places(
             items = items[offset:offset + limit]
 
         access_tier = "demo" if is_demo_mode else "full"
-        # Only show total if there's more data than what we're showing (teaser)
-        show_total = is_demo_mode and total_count > len(items)
-        logger.info(f"Served {len(items)} halal places for region {region} (tier: {access_tier}, eateries: {eateries_count}, markets: {markets_count})")
+        logger.info(f"Served {len(items)} halal places for region {region} (tier: {access_tier})")
 
         return HalalPlacesResponse(
             version="1.0",
             region=region,
-            count=len(items),
-            total=total_count if show_total else None,
             access_tier=access_tier,
-            eateries_count=eateries_count,
-            markets_count=markets_count,
             items=items
         )
 
@@ -1542,16 +1457,6 @@ async def get_masajid(
         expected_key = settings.prowasl_api_key
         is_demo_mode = not api_key or api_key != expected_key
         DEMO_LIMIT = 5
-
-        # Get total count - only verified masajid
-        count_sql = "SELECT COUNT(*) FROM masajid WHERE region = :region AND verification_status = 'verified'"
-        count_params = {'region': region}
-        if city:
-            count_sql += " AND LOWER(address_city) = LOWER(:city)"
-            count_params['city'] = city
-
-        count_result = await db.execute(text(count_sql), count_params)
-        total_count = count_result.scalar() or 0
 
         # Build query - only verified masajid (excludes unverified entries without standalone locations)
         query_sql = """
@@ -1615,15 +1520,11 @@ async def get_masajid(
             ))
 
         access_tier = "demo" if is_demo_mode else "full"
-        # Only show total if there's more data than what we're showing (teaser)
-        show_total = is_demo_mode and total_count > len(items)
-        logger.info(f"Served {len(items)} masajid for region {region} (tier: {access_tier}, total: {total_count})")
+        logger.info(f"Served {len(items)} masajid for region {region} (tier: {access_tier})")
 
         return MasajidResponse(
             version="1.0",
             region=region,
-            count=len(items),
-            total=total_count if show_total else None,
             access_tier=access_tier,
             items=items
         )
