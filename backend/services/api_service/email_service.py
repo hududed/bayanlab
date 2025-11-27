@@ -286,6 +286,177 @@ Run 'uv run python scripts/review_claims.py' to review and approve this claim.
             logger.error(f"Error sending admin notification: {e}")
             return False
 
+    async def send_discovery_notification(
+        self,
+        to_email: str,
+        business_name: str,
+        city: str,
+        state: str,
+        claim_id: str
+    ) -> bool:
+        """
+        Send notification to business owners we discovered from external sources.
+
+        This is for businesses we've added from directories like MBC - letting them
+        know their business is now listed and inviting them to claim/update it.
+
+        Args:
+            to_email: Business contact email
+            business_name: Name of the business
+            city: Business city
+            state: Business state
+            claim_id: Unique claim ID for reference
+
+        Returns:
+            True if email was sent successfully, False otherwise
+        """
+        if not self.enabled:
+            logger.warning("Email service is disabled - skipping discovery email")
+            return False
+
+        try:
+            subject = f"Your business {business_name} is now on ProWasl!"
+
+            html_content = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+    <table role="presentation" style="width: 100%; border-collapse: collapse;">
+        <tr>
+            <td style="padding: 40px 20px;">
+                <table role="presentation" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); padding: 40px 30px; text-align: center;">
+                            <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: 700;">
+                                We Found Your Business!
+                            </h1>
+                        </td>
+                    </tr>
+
+                    <!-- Body -->
+                    <tr>
+                        <td style="padding: 40px 30px;">
+                            <p style="margin: 0 0 20px; color: #1f2937; font-size: 16px; line-height: 1.6;">
+                                As-salamu alaykum,
+                            </p>
+
+                            <p style="margin: 0 0 20px; color: #1f2937; font-size: 16px; line-height: 1.6;">
+                                Great news! We discovered <strong>{business_name}</strong> in {city}, {state} and have added it to <strong>ProWasl</strong> - a directory connecting the Muslim community with trusted businesses.
+                            </p>
+
+                            <div style="background-color: #f0f9ff; border-left: 4px solid #3b82f6; padding: 20px; margin: 30px 0; border-radius: 8px;">
+                                <p style="margin: 0 0 10px; color: #1e40af; font-size: 14px; font-weight: 600;">
+                                    YOUR LISTING REFERENCE
+                                </p>
+                                <p style="margin: 0; color: #1d4ed8; font-size: 18px; font-weight: 700; font-family: 'Courier New', monospace;">
+                                    {claim_id}
+                                </p>
+                            </div>
+
+                            <h2 style="margin: 30px 0 15px; color: #1f2937; font-size: 20px; font-weight: 600;">
+                                What this means for you
+                            </h2>
+
+                            <ul style="margin: 0 0 30px; padding-left: 25px; color: #4b5563; font-size: 15px; line-height: 1.8;">
+                                <li style="margin-bottom: 10px;">Your business is now visible to Muslims looking for trusted services</li>
+                                <li style="margin-bottom: 10px;">Community members can find you on prowasl.com</li>
+                                <li style="margin-bottom: 10px;">No action needed - your listing is already live!</li>
+                            </ul>
+
+                            <div style="background-color: #fefce8; padding: 20px; border-radius: 8px; margin: 30px 0;">
+                                <p style="margin: 0 0 10px; color: #854d0e; font-size: 15px; font-weight: 600;">
+                                    Want to update your listing?
+                                </p>
+                                <p style="margin: 0; color: #713f12; font-size: 14px; line-height: 1.6;">
+                                    If any information is incorrect or you'd like to add more details, simply reply to this email with your updates. We're happy to help!
+                                </p>
+                            </div>
+
+                            <p style="margin: 30px 0 0; color: #4b5563; font-size: 15px; line-height: 1.6;">
+                                Questions or concerns? Just reply to this email.
+                            </p>
+
+                            <p style="margin: 20px 0 0; color: #4b5563; font-size: 15px; line-height: 1.6;">
+                                BarakAllahu feek,<br>
+                                <strong style="color: #1f2937;">The ProWasl Team</strong>
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f9fafb; padding: 30px; text-align: center; border-top: 1px solid #e5e7eb;">
+                            <p style="margin: 0 0 10px; color: #6b7280; font-size: 13px;">
+                                ProWasl - Connecting Muslims with Halal Businesses
+                            </p>
+                            <p style="margin: 0; color: #9ca3af; font-size: 12px;">
+                                Your business was discovered through a Muslim business directory.<br>
+                                If you'd like to be removed, simply reply to this email.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+"""
+
+            text_content = f"""
+As-salamu alaykum,
+
+Great news! We discovered {business_name} in {city}, {state} and have added it to ProWasl - a directory connecting the Muslim community with trusted businesses.
+
+YOUR LISTING REFERENCE: {claim_id}
+
+What this means for you:
+- Your business is now visible to Muslims looking for trusted services
+- Community members can find you on prowasl.com
+- No action needed - your listing is already live!
+
+Want to update your listing?
+If any information is incorrect or you'd like to add more details, simply reply to this email with your updates. We're happy to help!
+
+Questions or concerns? Just reply to this email.
+
+BarakAllahu feek,
+The ProWasl Team
+
+---
+ProWasl - Connecting Muslims with Halal Businesses
+Your business was discovered through a Muslim business directory.
+If you'd like to be removed, simply reply to this email.
+"""
+
+            message = Mail(
+                from_email=Email(self.from_email, self.from_name),
+                to_emails=To(to_email),
+                subject=subject,
+                plain_text_content=Content("text/plain", text_content),
+                html_content=Content("text/html", html_content)
+            )
+
+            message.reply_to = Email(self.reply_to)
+
+            response = self.client.send(message)
+
+            if response.status_code in [200, 201, 202]:
+                logger.info(f"Discovery email sent to {to_email} for business {business_name}")
+                return True
+            else:
+                logger.error(f"Failed to send discovery email. Status: {response.status_code}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error sending discovery email: {e}")
+            return False
+
 
 # Singleton instance
 email_service = EmailService()

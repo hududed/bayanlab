@@ -384,4 +384,36 @@ Applied to fields:
 
 ---
 
+## ADR-020: External Business Discovery & Import
+**Date:** Nov 2025 | **Status:** Accepted
+
+**Context:** To bootstrap ProWasl directory, we need to import businesses from external Muslim business directories (e.g., Muslim Business Central).
+
+**Decision:** Create import pipeline with discovery email workflow:
+1. **Scrape** external directories → JSON files (stored locally, not committed)
+2. **Import** to `business_claim_submissions` with `status=staging`
+3. **Gradual approval** via cron (5/week for organic growth)
+4. **Discovery emails** sent to businesses with real emails after approval
+
+**Implementation:**
+- Scripts in `scripts/` (gitignored - contain scraping logic)
+- Cron job on Raspberry Pi: `cron_approve_and_notify.py`
+- Discovery email tracking: `discovery_email_sent`, `discovery_email_sent_at` columns
+- `submitted_from` field tracks source (e.g., `mbc_import`, `web`)
+
+**Email Flow:**
+- Web submissions → immediate confirmation email
+- External imports → discovery email only after approval (if real email exists)
+- No email if `owner_email = 'import@bayanlab.com'` (placeholder)
+
+**Consequences:**
+✅ Bootstraps directory with validated businesses
+✅ Organic growth appearance (not all at once)
+✅ Notifies real business owners of their listing
+✅ Easy opt-out (reply to remove)
+❌ Scrape scripts not version controlled (intentional)
+❌ Dependent on external directory availability
+
+---
+
 **Maintained by:** BayanLab Engineering

@@ -65,5 +65,14 @@ backend/data/
 exports/
 .vercel
 
-# Seed data 
+# Seed data
 seed/
+data/
+
+# Scrape/import scripts (contain external directory logic)
+scripts/scrape_*.py
+scripts/import_*.py
+scripts/cron_approve*.py
+scripts/cron_approve*.sh
+scripts/send_discovery_emails.py
+scripts/approve_staged_businesses.py

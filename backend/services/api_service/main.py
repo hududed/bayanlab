@@ -1157,12 +1157,13 @@ async def get_halal_eateries(
              halal_status_val, is_favorite, is_food_truck, is_carry_out_only,
              is_cafe_bakery, has_many_locations, source, google_place_id, updated_at) = row
 
-            # In demo mode: redact contact info and operational details (like Enigma)
+            # In demo mode: redact contact info and operational details
             if is_demo_mode:
                 phone = None
                 website = None
                 hours_raw = None
                 google_place_id = None
+                source = "community_verified"
 
             eatery = HalalEateryAPI(
                 eatery_id=str(eatery_id),
@@ -1278,6 +1279,7 @@ async def get_halal_markets(
 
             if is_demo_mode:
                 phone, website, hours, gplace = None, None, None, None
+                source = "community_verified"
 
             items.append(HalalMarketAPI(
                 market_id=str(market_id),
@@ -1369,6 +1371,7 @@ async def get_halal_places(
                 (eid, name, cuisine, street, ecity, state, zip_code, lat, lng, phone, website, hours, rating, status, source, gplace, updated) = row
                 if is_demo_mode:
                     phone, website, hours, gplace = None, None, None, None
+                    source = "community_verified"
                 items.append(HalalPlaceAPI(
                     place_id=str(eid), place_type="eatery", name=name, category=cuisine,
                     address=Address(street=street, city=ecity, state=state, zip=zip_code),
@@ -1396,6 +1399,7 @@ async def get_halal_places(
                 (mid, name, cat, street, mcity, state, zip_code, lat, lng, phone, website, hours, rating, status, source, gplace, updated) = row
                 if is_demo_mode:
                     phone, website, hours, gplace = None, None, None, None
+                    source = "community_verified"
                 items.append(HalalPlaceAPI(
                     place_id=str(mid), place_type="market", name=name, category=cat,
                     address=Address(street=street, city=mcity, state=state, zip=zip_code),
@@ -1495,6 +1499,7 @@ async def get_masajid(
 
             if is_demo_mode:
                 phone, website, email = None, None, None
+                source = "community_verified"
 
             items.append(MasjidAPI(
                 masjid_id=str(masjid_id),

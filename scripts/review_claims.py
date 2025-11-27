@@ -71,11 +71,33 @@ def get_user_decision():
             print("❌ Invalid choice. Please enter 'a', 'r', 's', or 'q'.")
 
 
+def clean_address_for_geocoding(address: str) -> str:
+    """Remove apartment/unit numbers that confuse OSM geocoder"""
+    import re
+    # Remove common apartment/unit patterns
+    # Matches: Apt A-307, Unit 5, Suite 100, #123, Ste. 200, etc.
+    patterns = [
+        r'\s+apt\.?\s*[a-z0-9\-]+',     # Apt A-307, Apt. 5
+        r'\s+unit\.?\s*[a-z0-9\-]+',    # Unit 5, Unit A
+        r'\s+suite\.?\s*[a-z0-9\-]+',   # Suite 100
+        r'\s+ste\.?\s*[a-z0-9\-]+',     # Ste. 200
+        r'\s+#\s*[a-z0-9\-]+',          # #123
+        r'\s+bldg\.?\s*[a-z0-9\-]+',    # Bldg 2
+    ]
+    cleaned = address
+    for pattern in patterns:
+        cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
+    return cleaned.strip()
+
+
 def geocode_address(address: str) -> tuple[float, float] | None:
     """Geocode address using OSM Nominatim (free)"""
+    # Clean address of apartment/unit numbers that confuse OSM
+    cleaned_address = clean_address_for_geocoding(address)
+
     url = "https://nominatim.openstreetmap.org/search"
     params = {
-        "q": address,
+        "q": cleaned_address,
         "format": "json",
         "limit": 1
     }
