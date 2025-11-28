@@ -700,6 +700,10 @@
                     localStorage.setItem('bayanlab_admin_key', urlAdminKey);
                 }
 
+                // Clean URL to hide keys from browser bar (security hardening)
+                // This removes ?key=xxx&admin=xxx from visible URL without reloading
+                window.history.replaceState({}, document.title, window.location.pathname);
+
                 // Auto-connect (skip login screen)
                 verifyAndConnect();
                 return;
