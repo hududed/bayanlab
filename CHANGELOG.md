@@ -12,15 +12,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dual-mode ICS poller (supports both public ICS URLs and Calendar API)
 - Masjid onboarding documentation
 - Service account setup guide
+- Data migration scripts for organizing `business_claim_submissions`
+  - `migrate_masajid.py` - Move mosques/Islamic centers to `masajid` table
+  - `migrate_food.py` - Move halal eateries/markets to specialized tables
+- `nonprofits` table for non-business organizations (CAIR, MSAs, foundations, food pantries)
+- Address/city cleaning in geocoding for improved results (suite number removal, city normalization)
+- Discovery email system for notifying imported businesses
 
 ### Changed
 - Repository structure consolidated from `backbone/` to `backend/`
 - All imports updated to use `backend.services` namespace
 - Docker configuration updated for new structure
+- Consolidated geocoding scripts into single `geocode_staging.py`
+- Archived one-time migration scripts to `scripts/archive/`
+- API response models no longer include `count` field (breaking change)
 
 ### Fixed
 - SQL queries wrapped with `text()` for SQLAlchemy 2.0 compatibility
 - Pydantic validation errors for Settings model
+- Switched from Google Geocoding to OSM Nominatim (free, no API key required)
+
+### Security
+- Removed hardcoded database credentials from migration scripts
+- Migration scripts now require environment variables (no fallback credentials)
+- Added `scripts/migrate_*.py` to `.gitignore` to prevent credential exposure
 
 ## [0.1.0] - 2025-11-09
 

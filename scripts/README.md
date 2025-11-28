@@ -212,3 +212,74 @@ echo "Test" | mail -s "Test Subject" your@email.com
    ```
 
 See [docs/setup.md](../docs/setup.md) for comprehensive setup guide.
+
+---
+
+## Data Management Scripts
+
+Scripts for managing data migration and geocoding. These are **not tracked in git** as they may contain sensitive configuration.
+
+### `geocode_staging.py` (tracked)
+Geocodes businesses in `staging_businesses` table using OSM Nominatim.
+
+**Features:**
+- Address cleaning (removes suite numbers, normalizes city names)
+- Batch processing with rate limiting
+- Supports filtering by source
+- Dry-run mode for previewing changes
+
+**Usage:**
+```bash
+# Preview geocoding (dry run)
+uv run python scripts/geocode_staging.py --dry-run
+
+# Geocode specific source
+uv run python scripts/geocode_staging.py --source emannest_import --batch 50
+
+# Geocode all pending
+uv run python scripts/geocode_staging.py --batch 100
+```
+
+### `migrate_masajid.py` (untracked)
+Migrates mosques/Islamic centers from `business_claim_submissions` to `masajid` table.
+
+**Usage:**
+```bash
+# Dry run (preview)
+uv run python scripts/migrate_masajid.py
+
+# Execute migration (local DB)
+uv run python scripts/migrate_masajid.py --migrate
+
+# Execute on production
+uv run python scripts/migrate_masajid.py --migrate --prod
+
+# Delete from claims after migration
+uv run python scripts/migrate_masajid.py --migrate --delete
+```
+
+**Requires:** `NEON_DB_URL` env var for `--prod` flag.
+
+### `migrate_food.py` (untracked)
+Migrates food businesses from `business_claim_submissions` to specialized tables:
+- Halal eateries → `halal_eateries`
+- Halal markets → `halal_markets`
+- Food pantries → `nonprofits` (as food_assistance)
+- Hybrid businesses → both eatery and market tables
+
+**Usage:**
+```bash
+# Dry run (preview)
+uv run python scripts/migrate_food.py
+
+# Execute migration
+uv run python scripts/migrate_food.py --migrate
+
+# Execute on production with cleanup
+uv run python scripts/migrate_food.py --migrate --delete --prod
+```
+
+**Requires:** `NEON_DB_URL` env var for `--prod` flag.
+
+### `scripts/archive/`
+Contains one-time migration scripts that have been executed and archived for reference.
