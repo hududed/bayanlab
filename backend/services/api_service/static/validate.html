@@ -374,6 +374,7 @@
         .admin-section {
             background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
             border: 2px solid #3b82f6;
+            display: none;  /* Hidden by default - shown via JS for admins */
         }
 
         .admin-section .queue-header {
@@ -776,16 +777,20 @@
             setTimeout(() => el.style.display = 'none', 4000);
         }
 
-        // Update user role display based on admin key
+        // Update user role display and admin section visibility
         function updateUserRole() {
             const roleEl = document.getElementById('user-role');
+            const adminSection = document.querySelector('.admin-section');
             const hasAdminKey = localStorage.getItem('bayanlab_admin_key');
+
             if (hasAdminKey) {
                 roleEl.textContent = 'Admin';
                 roleEl.style.color = '#f59e0b';  // Amber/gold color for admin
+                if (adminSection) adminSection.style.display = 'block';
             } else {
                 roleEl.textContent = 'Team Member';
                 roleEl.style.color = '';  // Default color
+                if (adminSection) adminSection.style.display = 'none';
             }
         }
 
