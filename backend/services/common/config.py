@@ -10,9 +10,9 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     """Application settings"""
-    # Database
-    database_url: str = "postgresql+asyncpg://bayan:bayan@localhost:5432/bayan_backbone"
-    database_url_sync: str = "postgresql://bayan:bayan@localhost:5432/bayan_backbone"
+    # Database - MUST be set via environment or .env, no defaults
+    database_url: str
+    database_url_sync: str
 
     # API
     api_host: str = "0.0.0.0"
@@ -45,9 +45,13 @@ class Settings(BaseSettings):
     # SendGrid Email
     sendgrid_api_key: str | None = None
     sendgrid_from_email: str = "info@prowasl.com"
-    sendgrid_from_name: str = "ProWasl Team"
+    sendgrid_from_name: str = "ProWasl"
     sendgrid_reply_to: str = "info@prowasl.com"
     admin_email: str | None = None  # Email for admin notifications (claim submissions, etc.)
+
+    # Internal Validation Tool API Keys
+    internal_api_key: str | None = None  # For team access to validation tool
+    admin_api_key: str | None = None  # For admin-only approval operations
 
     # Region (default for V1)
     default_region: str = "CO"
@@ -62,7 +66,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     class Config:
-        env_file = ".env"
+        env_file = Path(__file__).parent.parent.parent.parent / ".env"
         case_sensitive = False
 
 

@@ -3,7 +3,7 @@ FastAPI service for BayanLab Community Data Backbone
 """
 from fastapi import FastAPI, Depends, Query, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -279,9 +279,34 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Configure appropriately for production
     allow_credentials=True,
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+
+# Security headers middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Add security headers to all responses"""
+    response = await call_next(request)
+
+    # Prevent clickjacking - don't allow in iframes
+    response.headers["X-Frame-Options"] = "DENY"
+
+    # Prevent MIME sniffing
+    response.headers["X-Content-Type-Options"] = "nosniff"
+
+    # XSS protection (legacy but still useful)
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+
+    # Referrer policy - don't leak URLs
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+    # Content Security Policy for internal tools
+    if "/validate" in request.url.path or "/internal/" in request.url.path:
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+
+    return response
 
 
 @app.get("/")
@@ -293,6 +318,32 @@ async def root():
     if not static_path.exists():
         raise HTTPException(status_code=404, detail="Claim form not found")
     return FileResponse(str(static_path))
+
+
+@app.get("/robots.txt")
+async def robots_txt():
+    """
+    Robots.txt to hide internal paths from search engines
+    """
+    content = """User-agent: *
+Disallow: /validate
+Disallow: /v1/internal/
+Disallow: /static/validate.html
+
+# Allow public API docs
+Allow: /docs
+Allow: /redoc
+Allow: /v1/events
+Allow: /v1/businesses
+Allow: /v1/halal-eateries
+Allow: /v1/halal-markets
+Allow: /v1/masajid
+"""
+    return JSONResponse(
+        content=content,
+        media_type="text/plain",
+        headers={"X-Robots-Tag": "noindex, nofollow"}
+    )
 
 
 @app.get("/favicon.ico")
@@ -325,6 +376,12 @@ async def healthz(db: AsyncSession = Depends(get_db)):
         result = await db.execute(text("SELECT 1"))
         result.scalar()
 
+        # Extract DB host for visibility (mask password)
+        db_url = settings.database_url
+        import re
+        db_host_match = re.search(r'@([^/]+)/', db_url)
+        db_host = db_host_match.group(1) if db_host_match else "unknown"
+
         return JSONResponse(
             status_code=200,
             content={
@@ -332,6 +389,7 @@ async def healthz(db: AsyncSession = Depends(get_db)):
                 "service": "bayan_backbone_api",
                 "version": "1.0.0",
                 "database": "connected",
+                "db_host": db_host,
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
         )
@@ -1436,6 +1494,506 @@ async def get_halal_places(
 # =============================================================================
 # Masajid (Mosques) API
 # =============================================================================
+
+# =============================================================================
+# Internal Validation API (Protected endpoints for team use)
+# =============================================================================
+
+class InternalBusinessResponse(BaseModel):
+    businesses: List[Dict[str, Any]]
+
+
+class DiscoveryRequest(BaseModel):
+    business_name: str
+    business_city: str
+    business_state: str
+    owner_name: Optional[str] = None
+    owner_email: Optional[str] = None
+    business_phone: Optional[str] = None  # Business phone from FB, not owner phone
+    business_street_address: Optional[str] = None
+    business_zip: Optional[str] = None
+    business_industry: Optional[str] = None
+    business_website: Optional[str] = None
+    business_description: Optional[str] = None  # For FB posts, etc.
+    submitted_from: str = "manual_discovery"
+    source_url: Optional[str] = None  # URL where business was discovered
+    notes: Optional[str] = None
+    muslim_owned: bool = True  # Default TRUE for manual discoveries
+
+
+class RejectRequest(BaseModel):
+    reason: Optional[str] = None
+
+
+class ApproveRequest(BaseModel):
+    claim_ids: List[str]
+
+
+def normalize_phone(phone: str | None) -> str | None:
+    """Strip non-digit characters from phone number."""
+    if not phone:
+        return None
+    digits = ''.join(c for c in phone if c.isdigit())
+    return digits if digits else None
+
+
+def verify_internal_key(request: Request) -> bool:
+    """Verify the internal API key from request headers."""
+    api_key = request.headers.get("X-Internal-Key")
+    expected_key = settings.internal_api_key
+    if not expected_key or api_key != expected_key:
+        raise HTTPException(status_code=401, detail="Invalid internal API key")
+    return True
+
+
+def verify_admin_key(request: Request) -> bool:
+    """Verify the admin API key for approval operations."""
+    api_key = request.headers.get("X-Admin-Key")
+    expected_key = settings.admin_api_key
+    if not expected_key or api_key != expected_key:
+        raise HTTPException(status_code=403, detail="Admin key required for this operation")
+    return True
+
+
+@app.get("/validate")
+async def serve_validate_form(request: Request):
+    """
+    Serve the internal validation tool UI.
+
+    Requires X-Internal-Key header OR key query param for server-side auth.
+    This prevents unauthorized access to the validation tool HTML.
+    """
+    # Check for API key in header or query param
+    api_key = request.headers.get("X-Internal-Key") or request.query_params.get("key")
+    expected_key = settings.internal_api_key
+
+    if not expected_key or api_key != expected_key:
+        # Return a simple login redirect page instead of the full tool
+        return HTMLResponse(
+            content="""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Access Denied</title>
+    <meta name="robots" content="noindex, nofollow">
+    <style>
+        body { font-family: sans-serif; background: #1a1a2e; color: #e0e0e0;
+               display: flex; align-items: center; justify-content: center;
+               min-height: 100vh; margin: 0; }
+        .box { background: #16213e; padding: 40px; border-radius: 12px; text-align: center; }
+        h1 { color: #ef4444; }
+        p { color: #a0aec0; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>Access Denied</h1>
+        <p>This tool requires authentication.</p>
+        <p>Please use the correct access URL with your key.</p>
+    </div>
+</body>
+</html>
+            """,
+            status_code=401
+        )
+
+    static_path = Path(__file__).parent / "static" / "validate.html"
+    if not static_path.exists():
+        raise HTTPException(status_code=404, detail="Validation tool not found")
+    return FileResponse(str(static_path))
+
+
+@app.get("/v1/internal/businesses", tags=["Internal"])
+@limiter.limit("30/minute")
+async def list_internal_businesses(
+    request: Request,
+    search: Optional[str] = Query(None, description="Search by business name"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db)
+):
+    """List all businesses for deduplication check (internal use)."""
+    verify_internal_key(request)
+
+    try:
+        query_sql = """
+            SELECT claim_id, short_claim_id, business_name, business_city, business_state,
+                   business_website, owner_email, owner_name, owner_phone,
+                   business_industry, business_description, notes,
+                   submitted_from, status
+            FROM business_claim_submissions
+            WHERE 1=1
+        """
+        params = {'limit': limit, 'offset': offset}
+
+        if search:
+            query_sql += " AND business_name ILIKE :search"
+            params['search'] = f"%{search}%"
+
+        if status:
+            query_sql += " AND status = :status"
+            params['status'] = status
+
+        query_sql += " ORDER BY submitted_at DESC LIMIT :limit OFFSET :offset"
+
+        result = await db.execute(text(query_sql), params)
+        rows = result.fetchall()
+
+        businesses = []
+        for row in rows:
+            businesses.append({
+                'claim_id': str(row.claim_id),
+                'short_claim_id': row.short_claim_id,
+                'business_name': row.business_name,
+                'business_city': row.business_city,
+                'business_state': row.business_state,
+                'business_website': row.business_website,
+                'owner_email': row.owner_email,
+                'owner_name': row.owner_name,
+                'owner_phone': row.owner_phone,
+                'business_industry': row.business_industry,
+                'business_description': row.business_description,
+                'notes': row.notes,
+                'submitted_from': row.submitted_from,
+                'status': row.status
+            })
+
+        return JSONResponse(content={'businesses': businesses})
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing internal businesses: {e}")
+        raise HTTPException(status_code=500, detail="Failed to list businesses")
+
+
+@app.get("/v1/internal/unverified", tags=["Internal"])
+@limiter.limit("30/minute")
+async def list_unverified_businesses(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """List unverified businesses needing validation."""
+    verify_internal_key(request)
+
+    try:
+        query_sql = """
+            SELECT claim_id, short_claim_id, business_name, business_city, business_state,
+                   business_street_address, business_zip, business_website, business_industry,
+                   owner_name, owner_email, owner_phone, business_phone, submitted_from, notes
+            FROM business_claim_submissions
+            WHERE status = 'unverified'
+            ORDER BY submitted_at ASC
+        """
+
+        result = await db.execute(text(query_sql))
+        rows = result.fetchall()
+
+        businesses = []
+        for row in rows:
+            businesses.append({
+                'claim_id': str(row.claim_id),
+                'short_claim_id': row.short_claim_id,
+                'business_name': row.business_name,
+                'business_city': row.business_city,
+                'business_state': row.business_state,
+                'business_street_address': row.business_street_address,
+                'business_zip': row.business_zip,
+                'business_website': row.business_website,
+                'business_industry': row.business_industry,
+                'owner_name': row.owner_name,
+                'owner_email': row.owner_email,
+                'owner_phone': row.owner_phone,
+                'business_phone': row.business_phone,
+                'submitted_from': row.submitted_from,
+                'notes': row.notes
+            })
+
+        return JSONResponse(content={'businesses': businesses})
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing unverified businesses: {e}")
+        raise HTTPException(status_code=500, detail="Failed to list unverified businesses")
+
+
+@app.get("/v1/internal/staging", tags=["Internal"])
+@limiter.limit("30/minute")
+async def list_staging_businesses(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """List staging businesses ready for admin approval."""
+    verify_internal_key(request)
+
+    try:
+        query_sql = """
+            SELECT claim_id, short_claim_id, business_name, business_city, business_state,
+                   business_website, owner_name, owner_email, submitted_from
+            FROM business_claim_submissions
+            WHERE status = 'staging'
+            ORDER BY submitted_at ASC
+        """
+
+        result = await db.execute(text(query_sql))
+        rows = result.fetchall()
+
+        businesses = []
+        for row in rows:
+            businesses.append({
+                'claim_id': str(row.claim_id),
+                'short_claim_id': row.short_claim_id,
+                'business_name': row.business_name,
+                'business_city': row.business_city,
+                'business_state': row.business_state,
+                'business_website': row.business_website,
+                'owner_name': row.owner_name,
+                'owner_email': row.owner_email,
+                'submitted_from': row.submitted_from
+            })
+
+        return JSONResponse(content={'businesses': businesses})
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing staging businesses: {e}")
+        raise HTTPException(status_code=500, detail="Failed to list staging businesses")
+
+
+@app.post("/v1/internal/discoveries", tags=["Internal"])
+@limiter.limit("20/minute")
+async def add_discovery(
+    request: Request,
+    discovery: DiscoveryRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Add a manually discovered business directly to staging."""
+    verify_internal_key(request)
+
+    try:
+        insert_query = text("""
+            INSERT INTO business_claim_submissions (
+                owner_name, owner_email, business_phone,
+                business_name, business_city, business_state,
+                business_street_address, business_zip,
+                business_industry, business_website, business_description,
+                submitted_from, source_url, notes, submitted_at, status,
+                muslim_owned, discovery_email_sent,
+                reviewed_at, reviewed_by
+            )
+            VALUES (
+                :owner_name, :owner_email, :business_phone,
+                :business_name, :business_city, :business_state,
+                :business_street_address, :business_zip,
+                :business_industry, :business_website, :business_description,
+                :submitted_from, :source_url, :notes, NOW(), 'staging',
+                :muslim_owned, FALSE,
+                NOW(), 'internal_team'
+            )
+            RETURNING claim_id, short_claim_id
+        """)
+
+        result = await db.execute(insert_query, {
+            'owner_name': discovery.owner_name if discovery.owner_name else None,
+            'owner_email': discovery.owner_email if discovery.owner_email else None,
+            'business_phone': normalize_phone(discovery.business_phone),
+            'business_name': discovery.business_name,
+            'business_city': discovery.business_city,
+            'business_state': discovery.business_state.upper(),
+            'business_street_address': discovery.business_street_address,
+            'business_zip': discovery.business_zip,
+            'business_industry': discovery.business_industry,
+            'business_website': discovery.business_website,
+            'business_description': discovery.business_description,
+            'submitted_from': discovery.submitted_from,
+            'source_url': discovery.source_url,
+            'notes': discovery.notes if discovery.notes else None,
+            'muslim_owned': discovery.muslim_owned
+        })
+
+        await db.commit()
+
+        row = result.first()
+        logger.info(f"Discovery added: {row.short_claim_id} - {discovery.business_name}")
+
+        return JSONResponse(content={
+            'claim_id': str(row.claim_id),
+            'short_claim_id': row.short_claim_id,
+            'message': 'Business added to staging'
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error adding discovery: {e}")
+        raise HTTPException(status_code=500, detail="Failed to add discovery")
+
+
+@app.post("/v1/internal/validate/{claim_id}", tags=["Internal"])
+@limiter.limit("30/minute")
+async def validate_business(
+    request: Request,
+    claim_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Move a business from unverified to staging."""
+    verify_internal_key(request)
+
+    try:
+        update_query = text("""
+            UPDATE business_claim_submissions
+            SET status = 'staging'
+            WHERE claim_id = :claim_id AND status = 'unverified'
+            RETURNING business_name
+        """)
+
+        result = await db.execute(update_query, {'claim_id': claim_id})
+        row = result.first()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Business not found or not in unverified status")
+
+        await db.commit()
+        logger.info(f"Business validated: {claim_id} - {row.business_name}")
+
+        return JSONResponse(content={'success': True, 'message': 'Business moved to staging'})
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error validating business: {e}")
+        raise HTTPException(status_code=500, detail="Failed to validate business")
+
+
+@app.post("/v1/internal/reject/{claim_id}", tags=["Internal"])
+@limiter.limit("30/minute")
+async def reject_business(
+    request: Request,
+    claim_id: str,
+    reject_data: RejectRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Reject a business (from unverified or staging)."""
+    verify_internal_key(request)
+
+    try:
+        update_query = text("""
+            UPDATE business_claim_submissions
+            SET status = 'rejected',
+                rejection_reason = :reason,
+                reviewed_at = NOW()
+            WHERE claim_id = :claim_id AND status IN ('unverified', 'staging')
+            RETURNING business_name
+        """)
+
+        result = await db.execute(update_query, {
+            'claim_id': claim_id,
+            'reason': reject_data.reason
+        })
+        row = result.first()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Business not found or cannot be rejected")
+
+        await db.commit()
+        logger.info(f"Business rejected: {claim_id} - {row.business_name}")
+
+        return JSONResponse(content={'success': True, 'message': 'Business rejected'})
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error rejecting business: {e}")
+        raise HTTPException(status_code=500, detail="Failed to reject business")
+
+
+@app.post("/v1/internal/approve", tags=["Internal"])
+@limiter.limit("10/minute")
+async def approve_businesses(
+    request: Request,
+    approve_data: ApproveRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Batch approve staging businesses and send discovery emails (admin only)."""
+    verify_internal_key(request)
+    verify_admin_key(request)
+
+    try:
+        approved_count = 0
+        emails_sent = 0
+
+        for claim_id in approve_data.claim_ids:
+            # Get business details
+            select_query = text("""
+                SELECT claim_id, short_claim_id, business_name, business_city, business_state,
+                       owner_email, discovery_email_sent
+                FROM business_claim_submissions
+                WHERE claim_id = :claim_id AND status = 'staging'
+            """)
+
+            result = await db.execute(select_query, {'claim_id': claim_id})
+            row = result.first()
+
+            if not row:
+                continue
+
+            # Update status to approved
+            update_query = text("""
+                UPDATE business_claim_submissions
+                SET status = 'approved',
+                    reviewed_at = NOW()
+                WHERE claim_id = :claim_id
+            """)
+            await db.execute(update_query, {'claim_id': claim_id})
+            approved_count += 1
+
+            # Send discovery email if not already sent and email is valid
+            if not row.discovery_email_sent and row.owner_email and row.owner_email != 'import@bayanlab.com':
+                try:
+                    email_sent = await email_service.send_discovery_notification(
+                        to_email=row.owner_email,
+                        business_name=row.business_name,
+                        city=row.business_city,
+                        state=row.business_state,
+                        claim_id=row.short_claim_id
+                    )
+
+                    if email_sent:
+                        email_update = text("""
+                            UPDATE business_claim_submissions
+                            SET discovery_email_sent = TRUE,
+                                discovery_email_sent_at = NOW()
+                            WHERE claim_id = :claim_id
+                        """)
+                        await db.execute(email_update, {'claim_id': claim_id})
+                        emails_sent += 1
+                        logger.info(f"Discovery email sent to {row.owner_email} for {row.business_name}")
+
+                except Exception as email_error:
+                    logger.error(f"Failed to send discovery email for {claim_id}: {email_error}")
+
+        await db.commit()
+        logger.info(f"Batch approval: {approved_count} approved, {emails_sent} emails sent")
+
+        return JSONResponse(content={
+            'success': True,
+            'approved': approved_count,
+            'emails_sent': emails_sent
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error in batch approval: {e}")
+        raise HTTPException(status_code=500, detail="Failed to approve businesses")
+
 
 @app.get("/v1/masajid", response_model=MasajidResponse, tags=["Masajid"])
 @limiter.limit("100/minute")
