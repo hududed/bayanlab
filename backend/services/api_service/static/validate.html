@@ -515,7 +515,7 @@
         <div class="header">
             <h1>Business Validation Tool</h1>
             <div class="header-right">
-                <span class="user-info">Logged in as <strong>Team Member</strong></span>
+                <span class="user-info">Logged in as <strong id="user-role">Team Member</strong></span>
                 <button class="btn-logout" onclick="logout()">Logout</button>
             </div>
         </div>
@@ -743,6 +743,10 @@
                     localStorage.setItem('bayanlab_internal_key', internalKey);
                     document.getElementById('login-screen').style.display = 'none';
                     document.querySelector('.container').style.display = 'block';
+
+                    // Update role display based on admin key presence
+                    updateUserRole();
+
                     loadAllData();
                 } else {
                     localStorage.removeItem('bayanlab_internal_key');
@@ -770,6 +774,19 @@
             el.textContent = msg;
             el.style.display = 'block';
             setTimeout(() => el.style.display = 'none', 4000);
+        }
+
+        // Update user role display based on admin key
+        function updateUserRole() {
+            const roleEl = document.getElementById('user-role');
+            const hasAdminKey = localStorage.getItem('bayanlab_admin_key');
+            if (hasAdminKey) {
+                roleEl.textContent = 'Admin';
+                roleEl.style.color = '#f59e0b';  // Amber/gold color for admin
+            } else {
+                roleEl.textContent = 'Team Member';
+                roleEl.style.color = '';  // Default color
+            }
         }
 
         // Load all data
@@ -1170,8 +1187,9 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    // Save admin key on success
+                    // Save admin key on success and update role display
                     localStorage.setItem('bayanlab_admin_key', adminKey);
+                    updateUserRole();
                     hideAdminModal();
                     showSuccess(`Approved ${data.approved} businesses, sent ${data.emails_sent} emails`);
                     loadAllData();
