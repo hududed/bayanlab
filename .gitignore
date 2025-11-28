@@ -69,9 +69,10 @@ exports/
 seed/
 data/
 
-# Scrape/import scripts (contain external directory logic)
+# Scrape/import/migration scripts (contain external directory logic)
 scripts/scrape_*.py
 scripts/import_*.py
+scripts/migrate_*.py
 scripts/cron_approve*.py
 scripts/cron_approve*.sh
 scripts/send_discovery_emails.py
