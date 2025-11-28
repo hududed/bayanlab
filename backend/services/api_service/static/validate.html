@@ -104,6 +104,20 @@
             display: none;
         }
 
+        /* Modal overlay for admin password */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
         .container {
             max-width: 1400px;
             margin: 0 auto;
@@ -477,6 +491,25 @@
         </div>
     </div>
 
+    <!-- Admin Password Modal -->
+    <div id="admin-modal" class="modal-overlay" style="display: none;">
+        <div class="login-box" style="max-width: 360px;">
+            <h1>🔐 Admin Approval</h1>
+            <p>Enter admin password to approve businesses</p>
+            <div id="admin-error" class="login-error"></div>
+            <form id="admin-form">
+                <div class="form-group">
+                    <label>Admin Password</label>
+                    <input type="password" id="admin-password" placeholder="Enter admin password" required>
+                </div>
+                <div style="display: flex; gap: 12px;">
+                    <button type="button" class="btn-login" style="background: #6b7280;" onclick="hideAdminModal()">Cancel</button>
+                    <button type="submit" class="btn-login">Approve</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div class="container">
         <!-- Header -->
         <div class="header">
@@ -652,6 +685,27 @@
 
         // Check for existing session on page load
         window.addEventListener('DOMContentLoaded', () => {
+            // First check URL params - if we got here via ?key=..., use that key
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlKey = urlParams.get('key');
+            const urlAdminKey = urlParams.get('admin');
+
+            if (urlKey) {
+                // Key from URL - save it and auto-connect
+                internalKey = urlKey;
+                localStorage.setItem('bayanlab_internal_key', urlKey);
+
+                // Also save admin key if provided in URL
+                if (urlAdminKey) {
+                    localStorage.setItem('bayanlab_admin_key', urlAdminKey);
+                }
+
+                // Auto-connect (skip login screen)
+                verifyAndConnect();
+                return;
+            }
+
+            // Fallback to saved session
             const savedKey = localStorage.getItem('bayanlab_internal_key');
             if (savedKey) {
                 internalKey = savedKey;
@@ -1039,6 +1093,24 @@
             loadAllData();
         }
 
+        // Pending approval IDs (set when modal is shown)
+        let pendingApprovalIds = [];
+
+        // Show admin password modal
+        function showAdminModal(ids) {
+            pendingApprovalIds = ids;
+            document.getElementById('admin-password').value = '';
+            document.getElementById('admin-error').style.display = 'none';
+            document.getElementById('admin-modal').style.display = 'flex';
+            document.getElementById('admin-password').focus();
+        }
+
+        // Hide admin password modal
+        function hideAdminModal() {
+            document.getElementById('admin-modal').style.display = 'none';
+            pendingApprovalIds = [];
+        }
+
         // Bulk approve (admin only)
         async function bulkApprove() {
             const ids = getSelectedIds('staging');
@@ -1047,20 +1119,39 @@
                 return;
             }
 
-            // Check for saved admin key or prompt
-            let adminKey = localStorage.getItem('bayanlab_admin_key');
-            if (!adminKey) {
-                adminKey = prompt('Enter admin password to approve:');
-                if (!adminKey) {
-                    showError('Admin password required for approval');
+            // Check for saved admin key - if we have it, use it directly
+            const savedAdminKey = localStorage.getItem('bayanlab_admin_key');
+            if (savedAdminKey) {
+                if (!confirm(`Approve ${ids.length} businesses and send discovery emails?`)) {
                     return;
                 }
+                await executeApproval(ids, savedAdminKey);
+            } else {
+                // Show modal to get admin password
+                showAdminModal(ids);
             }
+        }
 
-            if (!confirm(`Approve ${ids.length} businesses and send discovery emails?`)) {
+        // Admin form submit handler
+        document.getElementById('admin-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const adminKey = document.getElementById('admin-password').value;
+
+            if (!adminKey) {
+                document.getElementById('admin-error').textContent = 'Please enter admin password';
+                document.getElementById('admin-error').style.display = 'block';
                 return;
             }
 
+            if (!confirm(`Approve ${pendingApprovalIds.length} businesses and send discovery emails?`)) {
+                return;
+            }
+
+            await executeApproval(pendingApprovalIds, adminKey);
+        });
+
+        // Execute the actual approval
+        async function executeApproval(ids, adminKey) {
             try {
                 const response = await fetch(`${API_BASE}/v1/internal/approve`, {
                     method: 'POST',
@@ -1077,14 +1168,21 @@
                 if (response.ok) {
                     // Save admin key on success
                     localStorage.setItem('bayanlab_admin_key', adminKey);
+                    hideAdminModal();
                     showSuccess(`Approved ${data.approved} businesses, sent ${data.emails_sent} emails`);
                     loadAllData();
                 } else {
                     // Clear saved admin key on auth failure
                     if (response.status === 403) {
                         localStorage.removeItem('bayanlab_admin_key');
+                        // Show error in modal if it's open
+                        const modalError = document.getElementById('admin-error');
+                        modalError.textContent = 'Invalid admin password';
+                        modalError.style.display = 'block';
+                    } else {
+                        hideAdminModal();
+                        throw new Error(data.detail || 'Approval failed');
                     }
-                    throw new Error(data.detail || 'Approval failed');
                 }
             } catch (e) {
                 showError(e.message);

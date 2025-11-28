@@ -4,9 +4,13 @@ Internal tool for the ProWasl team to validate and add Muslim-owned businesses.
 
 ## Access
 
-**URL**: `https://claim.prowasl.com/validate?key=YOUR_TEAM_KEY`
+**Team URL**: `https://claim.prowasl.com/validate?key=YOUR_TEAM_KEY`
 
-Bookmark this URL - the key is required to access the tool.
+**Admin URL** (for approvals): `https://claim.prowasl.com/validate?key=YOUR_TEAM_KEY&admin=YOUR_ADMIN_KEY`
+
+Bookmark the appropriate URL - the key is required to access the tool.
+- Team members: Use the Team URL, enter admin password when approving
+- Admins: Use the Admin URL to skip password prompts for approvals
 
 ## Overview
 
