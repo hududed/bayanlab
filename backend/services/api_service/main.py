@@ -104,8 +104,8 @@ class BusinessSyncData(BaseModel):
     business_whatsapp: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
-    owner_name: str
-    owner_email: str
+    owner_name: Optional[str] = None
+    owner_email: Optional[str] = None
     owner_phone: Optional[str] = None
     muslim_owned: bool = False
     google_place_id: Optional[str] = None
@@ -1034,6 +1034,7 @@ async def sync_businesses(
                 submitted_at::text as updated_at
             FROM business_claim_submissions
             WHERE status = 'approved'
+            AND (owner_email IS NOT NULL OR business_phone IS NOT NULL OR owner_phone IS NOT NULL)
         """
 
         params = {}
