@@ -1613,29 +1613,108 @@ async def list_internal_businesses(
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db)
 ):
-    """List all businesses for deduplication check (internal use)."""
+    """List all businesses for deduplication check (internal use).
+
+    Searches across business_claim_submissions, halal_markets, and halal_eateries tables.
+    """
     verify_internal_key(request)
 
     try:
-        query_sql = """
-            SELECT claim_id, short_claim_id, business_name, business_city, business_state,
-                   business_website, owner_email, owner_name, owner_phone,
-                   business_industry, business_description, notes,
-                   submitted_from, status
-            FROM business_claim_submissions
-            WHERE 1=1
-        """
         params = {'limit': limit, 'offset': offset}
 
+        # Build WHERE clause for search
+        search_clause = ""
         if search:
-            query_sql += " AND business_name ILIKE :search"
+            search_clause = "WHERE business_name ILIKE :search"
             params['search'] = f"%{search}%"
 
+        # Status filter only applies to claims table
+        status_clause = ""
         if status:
-            query_sql += " AND status = :status"
+            status_clause = f"{'AND' if search else 'WHERE'} status = :status"
             params['status'] = status
 
-        query_sql += " ORDER BY submitted_at DESC LIMIT :limit OFFSET :offset"
+        # Check which tables exist (halal_markets and halal_eateries may not exist in some environments)
+        tables_result = await db.execute(text("""
+            SELECT table_name FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name IN ('halal_markets', 'halal_eateries')
+        """))
+        existing_tables = {row[0] for row in tables_result.fetchall()}
+
+        # Build dynamic union query - always include claims, conditionally add halal tables
+        query_parts = [f"""
+            SELECT
+                claim_id::text as id,
+                short_claim_id,
+                business_name,
+                business_city,
+                business_state,
+                business_website,
+                owner_email,
+                owner_name,
+                owner_phone,
+                business_industry,
+                submitted_from as source,
+                status,
+                'claims' as source_table,
+                submitted_at as created_at
+            FROM business_claim_submissions
+            {search_clause} {status_clause}
+        """]
+
+        # Add halal_markets if table exists (skip if filtering by status - these are always "live")
+        if 'halal_markets' in existing_tables and not status:
+            query_parts.append(f"""
+                SELECT
+                    market_id::text as id,
+                    NULL as short_claim_id,
+                    name as business_name,
+                    address_city as business_city,
+                    address_state as business_state,
+                    website as business_website,
+                    NULL as owner_email,
+                    NULL as owner_name,
+                    phone as owner_phone,
+                    category as business_industry,
+                    source,
+                    'live' as status,
+                    'halal_markets' as source_table,
+                    created_at
+                FROM halal_markets
+                {"WHERE name ILIKE :search" if search else ""}
+            """)
+
+        # Add halal_eateries if table exists (skip if filtering by status - these are always "live")
+        if 'halal_eateries' in existing_tables and not status:
+            query_parts.append(f"""
+                SELECT
+                    eatery_id::text as id,
+                    NULL as short_claim_id,
+                    name as business_name,
+                    address_city as business_city,
+                    address_state as business_state,
+                    website as business_website,
+                    NULL as owner_email,
+                    NULL as owner_name,
+                    phone as owner_phone,
+                    cuisine_style as business_industry,
+                    source,
+                    'live' as status,
+                    'halal_eateries' as source_table,
+                    created_at
+                FROM halal_eateries
+                {"WHERE name ILIKE :search" if search else ""}
+            """)
+
+        # Build final query with UNION ALL
+        query_sql = f"""
+            WITH all_businesses AS (
+                {" UNION ALL ".join(query_parts)}
+            )
+            SELECT * FROM all_businesses
+            ORDER BY created_at DESC NULLS LAST
+            LIMIT :limit OFFSET :offset
+        """
 
         result = await db.execute(text(query_sql), params)
         rows = result.fetchall()
@@ -1643,7 +1722,7 @@ async def list_internal_businesses(
         businesses = []
         for row in rows:
             businesses.append({
-                'claim_id': str(row.claim_id),
+                'claim_id': row.id,
                 'short_claim_id': row.short_claim_id,
                 'business_name': row.business_name,
                 'business_city': row.business_city,
@@ -1653,10 +1732,9 @@ async def list_internal_businesses(
                 'owner_name': row.owner_name,
                 'owner_phone': row.owner_phone,
                 'business_industry': row.business_industry,
-                'business_description': row.business_description,
-                'notes': row.notes,
-                'submitted_from': row.submitted_from,
-                'status': row.status
+                'submitted_from': row.source,
+                'status': row.status,
+                'source_table': row.source_table
             })
 
         return JSONResponse(content={'businesses': businesses})
