@@ -77,3 +77,9 @@ scripts/cron_approve*.py
 scripts/cron_approve*.sh
 scripts/send_discovery_emails.py
 scripts/approve_staged_businesses.py
+scripts/cron_scrapers.py
+scripts/run_scrapers_cron.sh
+scripts/deploy_to_pihole.sh
+
+# All documentation (internal use only)
+docs/
