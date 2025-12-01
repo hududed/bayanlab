@@ -413,8 +413,11 @@
             <input type="radio" name="provider_type" id="type-business" value="business" checked>
             <label for="type-business">I'm a Business</label>
             <input type="radio" name="provider_type" id="type-individual" value="individual">
-            <label for="type-individual">I'm an Individual/Tasker</label>
+            <label for="type-individual">I'm a Wasler</label>
         </div>
+        <p style="text-align: center; font-size: 12px; color: #718096; margin-top: -16px; margin-bottom: 20px;">
+            <em>Waslers are independent service providers on ProWasl</em>
+        </p>
 
         <form id="claim-form">
             <!-- Hidden field to store provider type -->
@@ -431,7 +434,7 @@
             <div class="form-group individual-only hidden">
                 <label>Display Name <span class="optional">(shown to customers)</span></label>
                 <input type="text" name="display_name" placeholder="Ahmed K.">
-                <small>TaskRabbit-style: First name + last initial for privacy</small>
+                <small>How you want customers to see your name</small>
             </div>
 
             <div class="form-group">
@@ -771,27 +774,22 @@
                 individualOnlyFields.forEach(el => el.classList.remove('hidden'));
                 businessNameInput.required = false;
                 businessIndustrySelect.required = false;
-                submitBtn.textContent = 'Join as Tasker';
+                submitBtn.textContent = 'Become a Wasler';
             }
         }
 
         typeBusiness.addEventListener('change', () => updateProviderType('business'));
         typeIndividual.addEventListener('change', () => updateProviderType('individual'));
 
-        // Skill chip selection
-        document.querySelectorAll('.skill-chip').forEach(chip => {
-            chip.addEventListener('click', function(e) {
-                if (e.target.tagName !== 'INPUT') {
-                    const checkbox = this.querySelector('input');
-                    checkbox.checked = !checkbox.checked;
-                }
-                this.classList.toggle('selected', this.querySelector('input').checked);
+        // Skill chip selection - use change event on checkbox instead of click on label
+        document.querySelectorAll('.skill-chip input[type="checkbox"]').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                this.closest('.skill-chip').classList.toggle('selected', this.checked);
             });
 
             // Initialize state
-            const checkbox = chip.querySelector('input');
             if (checkbox.checked) {
-                chip.classList.add('selected');
+                checkbox.closest('.skill-chip').classList.add('selected');
             }
         });
 
@@ -954,7 +952,7 @@
                 errorMsg.style.display = 'block';
             } finally {
                 submitBtn.disabled = false;
-                submitBtn.textContent = providerType === 'business' ? 'Submit Business' : 'Join as Tasker';
+                submitBtn.textContent = providerType === 'business' ? 'Submit Business' : 'Become a Wasler';
             }
         });
     </script>

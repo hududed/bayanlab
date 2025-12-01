@@ -985,11 +985,11 @@ async def get_business_counter(
     Goal doubles automatically: 100 → 250 → 500 → 1000...
     """
     try:
-        # Count user-submitted claims only (not scraped data)
+        # Count all user-submitted claims (claim_portal + admin_manual)
         count_query = """
             SELECT COUNT(*) as count
             FROM business_claim_submissions
-            WHERE submitted_from = 'claim_portal'
+            WHERE submitted_from IN ('claim_portal', 'admin_manual')
         """
 
         result = await db.execute(text(count_query))
