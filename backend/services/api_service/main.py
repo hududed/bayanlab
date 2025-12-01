@@ -563,111 +563,122 @@ async def get_events(
 @limiter.limit("100/minute")
 async def get_businesses(
     request: Request,
-    region: str = Query("CO", description="Region/state code (e.g., CO)"),
-    category: Optional[str] = Query(None, description="Filter by industry/category"),
+    state: Optional[str] = Query(None, description="Filter by state code (e.g., TX, CA). Omit for all states."),
+    category: Optional[str] = Query(None, description="Filter by category"),
     city: Optional[str] = Query(None, description="Filter by city"),
     limit: int = Query(100, ge=1, le=500, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Get Muslim-owned businesses for a region.
+    Get Muslim-owned businesses from the BayanLab directory.
 
-    Returns approved business claims from claim.prowasl.com.
-
-    **Access Tiers:**
-    - **Demo (no API key)**: 5 sample rows, redacted contact info
-    - **Full (with API key)**: All data, full contact details
+    Returns businesses from business_canonical table.
+    Requires API key for access.
     """
     try:
-        # Check API key for tiered access
+        # Require API key - no demo mode
         api_key = request.headers.get("X-API-Key")
         expected_key = settings.prowasl_api_key
-        is_demo_mode = not api_key or api_key != expected_key
-        DEMO_LIMIT = 5
+        if not api_key or api_key != expected_key:
+            raise HTTPException(
+                status_code=401,
+                detail="API key required. Include X-API-Key header."
+            )
 
-        # Build query for approved claims
+        # Build query from business_canonical
         query_sql = """
         SELECT
-            claim_id, business_name, business_industry, business_industry_other,
-            business_street_address, business_city, business_state, business_zip,
-            latitude, longitude, business_phone, business_whatsapp, business_website,
-            business_description, muslim_owned, submitted_at
-        FROM business_claim_submissions
-        WHERE status = 'approved' AND business_state = :region
+            business_id, name, category, address_street, address_city,
+            address_state, address_zip, latitude, longitude, phone,
+            email, website, description, hours_raw, muslim_owned,
+            updated_at
+        FROM business_canonical
+        WHERE 1=1
         """
 
-        params = {'region': region}
+        params: dict = {}
+
+        if state:
+            query_sql += " AND address_state = :state"
+            params['state'] = state.upper()
 
         if city:
-            query_sql += " AND LOWER(business_city) = LOWER(:city)"
+            query_sql += " AND LOWER(address_city) = LOWER(:city)"
             params['city'] = city
 
         if category:
-            query_sql += " AND business_industry = :category"
+            query_sql += " AND category = :category"
             params['category'] = category
 
-        query_sql += " ORDER BY submitted_at DESC"
-
-        # Apply limits based on access tier
-        if is_demo_mode:
-            query_sql += f" LIMIT {DEMO_LIMIT}"
-        else:
-            query_sql += " LIMIT :limit OFFSET :offset"
-            params['limit'] = limit
-            params['offset'] = offset
+        query_sql += " ORDER BY updated_at DESC NULLS LAST"
+        query_sql += " LIMIT :limit OFFSET :offset"
+        params['limit'] = limit
+        params['offset'] = offset
 
         # Execute query
         result = await db.execute(text(query_sql), params)
         rows = result.fetchall()
 
+        # Get total count for pagination
+        count_sql = """
+        SELECT COUNT(*) FROM business_canonical WHERE 1=1
+        """
+        if state:
+            count_sql += " AND address_state = :state"
+        if city:
+            count_sql += " AND LOWER(address_city) = LOWER(:city)"
+        if category:
+            count_sql += " AND category = :category"
+
+        count_result = await db.execute(text(count_sql), params)
+        total_count = count_result.scalar()
+
         # Build response
         items = []
         for row in rows:
-            (claim_id, name, industry, industry_other,
-             street, city_name, state, zip_code,
-             lat, lng, phone, whatsapp, website,
-             description, muslim_owned, submitted_at) = row
+            (business_id, name, category_val, street, city_name, state_val,
+             zip_code, lat, lng, phone, email, website, description,
+             hours_raw, muslim_owned, updated_at) = row
 
-            # Redact contact info in demo mode
-            if is_demo_mode:
-                phone = None
-                whatsapp = None
-                website = None
-
-            # Use industry_other if industry is "Other"
-            display_category = industry_other if industry == "Other" and industry_other else industry
+            # Always mask source as community_sourced
+            source = "community_sourced"
 
             items.append({
-                "business_id": str(claim_id),
+                "business_id": str(business_id),
                 "name": name,
-                "category": display_category,
+                "category": category_val,
                 "address": {
                     "street": street,
                     "city": city_name,
-                    "state": state,
+                    "state": state_val,
                     "zip_code": zip_code
                 },
                 "latitude": float(lat) if lat else None,
                 "longitude": float(lng) if lng else None,
                 "phone": phone,
-                "whatsapp": whatsapp,
+                "email": email,
                 "website": website,
                 "description": description,
+                "hours": hours_raw,
                 "muslim_owned": muslim_owned,
-                "updated_at": submitted_at.isoformat() if submitted_at else None
+                "source": source,
+                "updated_at": updated_at.isoformat() if updated_at else None
             })
 
         response = {
             "version": "1.0",
-            "region": region,
-            "access_tier": "demo" if is_demo_mode else "full",
+            "total": total_count,
+            "limit": limit,
+            "offset": offset,
             "items": items
         }
 
-        logger.info(f"Served {len(items)} businesses for region {region} (demo={is_demo_mode})")
+        logger.info(f"Served {len(items)} businesses (state={state}, total={total_count})")
         return JSONResponse(content=response)
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching businesses: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -910,56 +921,50 @@ async def get_business_counter(
     """
     Get live business counter with dynamic goal scaling
 
-    Goal doubles automatically: 10 → 20 → 40 → 80 → 160
-    Returns current count, goal, percentage, and display message
+    Counts all businesses in business_canonical table.
+    Goal doubles automatically: 1000 → 2000 → 4000 → 8000...
     """
     try:
-        # Count approved businesses
+        # Count all businesses from business_canonical
         count_query = """
             SELECT COUNT(*) as count
-            FROM business_claim_submissions
-            WHERE status = 'approved'
+            FROM business_canonical
         """
 
         result = await db.execute(text(count_query))
         count_row = result.fetchone()
         count = count_row.count if count_row else 0
 
-        # Dynamic goal scaling with custom milestones
-        # 10 → 25 → 50 → 100 → 200 → 400...
-        if count < 10:
-            goal = 10
-            title = "🚀 Founding 10 Businesses"
-            message = f"{count} / {goal} listed"
-            subtitle = "Join the early cohort before we open public search."
-        elif count < 25:
-            goal = 25
-            title = "🚀 Founding 25 Businesses"
-            message = f"{count} / {goal} listed"
-            subtitle = "Join the early cohort before we open public search."
-        elif count < 50:
-            goal = 50
-            title = "🌐 Colorado Launch Group — 50 Listings"
-            message = f"{count} / {goal} listed"
-            subtitle = "Launching Colorado local search soon. Add your business to be included."
-        elif count < 100:
-            goal = 100
-            title = "🌙 Ramadan Discovery Wave — 100+ Listings"
-            message = f"{count} / {goal} listed"
-            subtitle = "Building a nationwide list of trusted Muslim-owned & halal-friendly services for Ramadan."
+        # Dynamic goal scaling for larger dataset
+        # 1000 → 2000 → 5000 → 10000...
+        if count < 1000:
+            goal = 1000
+            title = "Building the Directory"
+            message = f"{count:,} / {goal:,} businesses"
+            subtitle = "Growing the largest Muslim-owned business directory."
+        elif count < 2000:
+            goal = 2000
+            title = "Nationwide Expansion"
+            message = f"{count:,} / {goal:,} businesses"
+            subtitle = "Expanding across all 50 states."
+        elif count < 5000:
+            goal = 5000
+            title = "5K Milestone"
+            message = f"{count:,} / {goal:,} businesses"
+            subtitle = "Building comprehensive coverage nationwide."
         else:
-            # After 100, double each time: 200, 400, 800...
-            goal = 100
+            # After 5000, double each time: 10000, 20000...
+            goal = 5000
             while count >= goal:
                 goal *= 2
-            title = "🌍 Nationwide Directory"
-            message = f"{count} / {goal} businesses listed"
-            subtitle = "Growing the largest directory of Muslim-owned businesses."
+            title = "Growing Directory"
+            message = f"{count:,} / {goal:,} businesses"
+            subtitle = "The largest Muslim-owned business directory in the US."
 
         # Calculate percentage
         percentage = round((count / goal) * 100, 1) if goal > 0 else 0
 
-        logger.info(f"Business counter: {count}/{goal} ({percentage}%) - {title}")
+        logger.info(f"Business counter: {count}/{goal} ({percentage}%)")
 
         return BusinessCounterResponse(
             count=count,
