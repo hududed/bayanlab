@@ -1148,9 +1148,7 @@ async def get_halal_eateries(
     Discovery API for established halal restaurants, cafes, and food trucks.
     Data sourced from community directories (Colorado Halal, Zabihah, etc.)
 
-    **Access Tiers:**
-    - **Demo (no API key)**: 5 sample rows, redacted contact info (phone/website hidden)
-    - **Full (with API key)**: All data, full contact details
+    **Authentication:** Requires API key via X-API-Key header.
 
     **Halal Status:**
     - `validated`: Confirmed halal by community directory
@@ -1164,13 +1162,14 @@ async def get_halal_eateries(
     - `favorites_only`: Return only community favorites
     """
     try:
-        # Check API key for tiered access
+        # Require API key - no demo mode
         api_key = request.headers.get("X-API-Key")
-        expected_key = settings.prowasl_api_key  # Reuse existing key for now
-        is_demo_mode = not api_key or api_key != expected_key
-
-        # Demo mode limits (like Enigma: 20 preview rows)
-        DEMO_LIMIT = 10
+        expected_key = settings.prowasl_api_key
+        if not api_key or api_key != expected_key:
+            raise HTTPException(
+                status_code=401,
+                detail="API key required. Include X-API-Key header."
+            )
 
         # Build main query
         query_sql = """
@@ -1184,15 +1183,7 @@ async def get_halal_eateries(
         WHERE region = :region
         """
 
-        # In demo mode: ignore pagination params, force limit to DEMO_LIMIT
-        if is_demo_mode:
-            effective_limit = DEMO_LIMIT
-            effective_offset = 0
-        else:
-            effective_limit = limit
-            effective_offset = offset
-
-        params = {'region': region, 'limit': effective_limit, 'offset': effective_offset}
+        params = {'region': region, 'limit': limit, 'offset': offset}
 
         if city:
             query_sql += " AND LOWER(address_city) = LOWER(:city)"
@@ -1225,13 +1216,6 @@ async def get_halal_eateries(
             # Always mask source - never expose internal source names (mda, mbc, etc.)
             source = "community_sourced"
 
-            # In demo mode: also redact contact info and operational details
-            if is_demo_mode:
-                phone = None
-                website = None
-                hours_raw = None
-                google_place_id = None
-
             eatery = HalalEateryAPI(
                 eatery_id=str(eatery_id),
                 name=name,
@@ -1260,13 +1244,12 @@ async def get_halal_eateries(
             )
             items.append(eatery)
 
-        access_tier = "demo" if is_demo_mode else "full"
-        logger.info(f"Served {len(items)} halal eateries for region {region} (tier: {access_tier})")
+        logger.info(f"Served {len(items)} halal eateries for region {region}")
 
         return HalalEateriesResponse(
             version="1.0",
             region=region,
-            access_tier=access_tier,
+            access_tier="full",
             items=items
         )
 
@@ -1295,20 +1278,22 @@ async def get_halal_markets(
 
     Grocery stores, butcher shops, and wholesale suppliers with halal products.
 
+    **Authentication:** Requires API key via X-API-Key header.
+
     **Categories:**
     - `grocery`: General halal grocery stores
     - `butcher`: Halal meat shops
     - `wholesale`: Wholesale suppliers (e.g., Restaurant Depot)
-
-    **Access Tiers:**
-    - **Demo (no API key)**: 5 sample rows, redacted contact info
-    - **Full (with API key)**: All data, full contact details
     """
     try:
+        # Require API key - no demo mode
         api_key = request.headers.get("X-API-Key")
         expected_key = settings.prowasl_api_key
-        is_demo_mode = not api_key or api_key != expected_key
-        DEMO_LIMIT = 5
+        if not api_key or api_key != expected_key:
+            raise HTTPException(
+                status_code=401,
+                detail="API key required. Include X-API-Key header."
+            )
 
         # Build query
         query_sql = """
@@ -1318,14 +1303,7 @@ async def get_halal_markets(
         FROM halal_markets WHERE region = :region
         """
 
-        if is_demo_mode:
-            effective_limit = DEMO_LIMIT
-            effective_offset = 0
-        else:
-            effective_limit = limit
-            effective_offset = offset
-
-        params = {'region': region, 'limit': effective_limit, 'offset': effective_offset}
+        params = {'region': region, 'limit': limit, 'offset': offset}
 
         if city:
             query_sql += " AND LOWER(address_city) = LOWER(:city)"
@@ -1347,9 +1325,6 @@ async def get_halal_markets(
             # Always mask source - never expose internal source names (mda, mbc, etc.)
             source = "community_sourced"
 
-            if is_demo_mode:
-                phone, website, hours, gplace = None, None, None, None
-
             items.append(HalalMarketAPI(
                 market_id=str(market_id),
                 name=name,
@@ -1370,13 +1345,12 @@ async def get_halal_markets(
                 updated_at=updated
             ))
 
-        access_tier = "demo" if is_demo_mode else "full"
-        logger.info(f"Served {len(items)} halal markets for region {region} (tier: {access_tier})")
+        logger.info(f"Served {len(items)} halal markets for region {region}")
 
         return HalalMarketsResponse(
             version="1.0",
             region=region,
-            access_tier=access_tier,
+            access_tier="full",
             items=items
         )
 
@@ -1406,19 +1380,21 @@ async def get_halal_places(
     Combined API for apps that need both restaurants and grocery stores.
     Ideal for apps like Ummah that show all halal food sources.
 
+    **Authentication:** Requires API key via X-API-Key header.
+
     **Place Types:**
     - `eatery`: Restaurants, cafes, food trucks
     - `market`: Grocery stores, butchers, wholesale
-
-    **Access Tiers:**
-    - **Demo (no API key)**: 10 sample rows, redacted contact info
-    - **Full (with API key)**: All data, full contact details
     """
     try:
+        # Require API key - no demo mode
         api_key = request.headers.get("X-API-Key")
         expected_key = settings.prowasl_api_key
-        is_demo_mode = not api_key or api_key != expected_key
-        DEMO_LIMIT = 10
+        if not api_key or api_key != expected_key:
+            raise HTTPException(
+                status_code=401,
+                detail="API key required. Include X-API-Key header."
+            )
 
         items = []
 
@@ -1440,8 +1416,6 @@ async def get_halal_places(
                 (eid, name, cuisine, street, ecity, state, zip_code, lat, lng, phone, website, hours, rating, status, source, gplace, updated) = row
                 # Always mask source - never expose internal source names (mda, mbc, etc.)
                 source = "community_sourced"
-                if is_demo_mode:
-                    phone, website, hours, gplace = None, None, None, None
                 items.append(HalalPlaceAPI(
                     place_id=str(eid), place_type="eatery", name=name, category=cuisine,
                     address=Address(street=street, city=ecity, state=state, zip=zip_code),
@@ -1469,8 +1443,6 @@ async def get_halal_places(
                 (mid, name, cat, street, mcity, state, zip_code, lat, lng, phone, website, hours, rating, status, source, gplace, updated) = row
                 # Always mask source - never expose internal source names (mda, mbc, etc.)
                 source = "community_sourced"
-                if is_demo_mode:
-                    phone, website, hours, gplace = None, None, None, None
                 items.append(HalalPlaceAPI(
                     place_id=str(mid), place_type="market", name=name, category=cat,
                     address=Address(street=street, city=mcity, state=state, zip=zip_code),
@@ -1483,19 +1455,15 @@ async def get_halal_places(
         # Sort combined by rating
         items.sort(key=lambda x: (x.google_rating or 0), reverse=True)
 
-        # Apply demo limit or pagination
-        if is_demo_mode:
-            items = items[:DEMO_LIMIT]
-        else:
-            items = items[offset:offset + limit]
+        # Apply pagination
+        items = items[offset:offset + limit]
 
-        access_tier = "demo" if is_demo_mode else "full"
-        logger.info(f"Served {len(items)} halal places for region {region} (tier: {access_tier})")
+        logger.info(f"Served {len(items)} halal places for region {region}")
 
         return HalalPlacesResponse(
             version="1.0",
             region=region,
-            access_tier=access_tier,
+            access_tier="full",
             items=items
         )
 
@@ -2159,34 +2127,29 @@ async def get_masajid(
 
     Returns Islamic centers and mosques with details about facilities and services.
 
-    **Access Tiers:**
-    - **Demo (no API key)**: 5 sample rows, redacted contact info
-    - **Full (with API key)**: All data, full contact details
+    **Authentication:** Requires API key via X-API-Key header.
     """
     try:
+        # Require API key - no demo mode
         api_key = request.headers.get("X-API-Key")
         expected_key = settings.prowasl_api_key
-        is_demo_mode = not api_key or api_key != expected_key
-        DEMO_LIMIT = 5
+        if not api_key or api_key != expected_key:
+            raise HTTPException(
+                status_code=401,
+                detail="API key required. Include X-API-Key header."
+            )
 
         # Build query - only verified masajid (excludes unverified entries without standalone locations)
         query_sql = """
         SELECT masjid_id, name, address_street, address_city, address_state, address_zip,
-               latitude, longitude, phone, website, email, languages,
+               latitude, longitude, phone, website, email, denomination, languages,
                has_womens_section, has_parking, has_wudu_facilities,
                offers_jumah, offers_daily_prayers, offers_quran_classes, offers_weekend_school,
                verification_status, source, updated_at
         FROM masajid WHERE region = :region AND verification_status = 'verified'
         """
 
-        if is_demo_mode:
-            effective_limit = DEMO_LIMIT
-            effective_offset = 0
-        else:
-            effective_limit = limit
-            effective_offset = offset
-
-        params = {'region': region, 'limit': effective_limit, 'offset': effective_offset}
+        params = {'region': region, 'limit': limit, 'offset': offset}
 
         if city:
             query_sql += " AND LOWER(address_city) = LOWER(:city)"
@@ -2206,9 +2169,6 @@ async def get_masajid(
 
             # Always mask source - never expose internal source names (mda, mbc, etc.)
             source = "community_sourced"
-
-            if is_demo_mode:
-                phone, website, email = None, None, None
 
             items.append(MasjidAPI(
                 masjid_id=str(masjid_id),
@@ -2233,13 +2193,12 @@ async def get_masajid(
                 updated_at=updated
             ))
 
-        access_tier = "demo" if is_demo_mode else "full"
-        logger.info(f"Served {len(items)} masajid for region {region} (tier: {access_tier})")
+        logger.info(f"Served {len(items)} masajid for region {region}")
 
         return MasajidResponse(
             version="1.0",
             region=region,
-            access_tier=access_tier,
+            access_tier="full",
             items=items
         )
 
