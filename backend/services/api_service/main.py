@@ -81,7 +81,7 @@ class BusinessClaimRequest(BaseModel):
     business_whatsapp: Optional[str] = None
     business_description: Optional[str] = None
     muslim_owned: bool = False
-    submitted_from: str = "web"
+    submitted_from: str = "claim_portal"
 
 
 class BusinessClaimResponse(BaseModel):
@@ -988,7 +988,8 @@ async def sync_businesses(
     """
     Sync endpoint for ProWasl directory
 
-    Returns approved businesses from business_claim_submissions table.
+    Returns verified businesses from business_canonical table.
+    Only businesses with verified=TRUE are synced to ProWasl.
     Requires X-API-Key header for authentication.
     """
     try:
@@ -1004,21 +1005,21 @@ async def sync_businesses(
             logger.warning(f"Invalid API key attempt from {get_remote_address(request)}")
             raise HTTPException(status_code=401, detail="Invalid API key")
 
-        # Build query to fetch approved business claims
+        # Build query to fetch verified businesses from canonical table
         query = """
             SELECT
-                claim_id::text as business_id,
-                business_name,
-                business_industry,
-                business_industry_other,
-                business_description,
-                business_website,
-                business_street_address as business_address,
-                business_city,
-                business_state,
-                business_zip,
-                business_phone,
-                business_whatsapp,
+                business_id::text as business_id,
+                name as business_name,
+                category::text as business_industry,
+                NULL::text as business_industry_other,
+                description as business_description,
+                website as business_website,
+                address_street as business_address,
+                address_city as business_city,
+                address_state as business_state,
+                address_zip as business_zip,
+                phone as business_phone,
+                NULL::text as business_whatsapp,
                 latitude,
                 longitude,
                 owner_name,
@@ -1030,11 +1031,11 @@ async def sync_businesses(
                 NULL::int as google_review_count,
                 NULL::jsonb as business_hours,
                 ARRAY[]::text[] as photos,
-                status,
-                submitted_at::text as updated_at
-            FROM business_claim_submissions
-            WHERE status = 'approved'
-            AND (owner_email IS NOT NULL OR business_phone IS NOT NULL OR owner_phone IS NOT NULL)
+                'verified' as status,
+                COALESCE(updated_at, created_at)::text as updated_at
+            FROM business_canonical
+            WHERE verified = TRUE
+            AND (email IS NOT NULL OR phone IS NOT NULL OR owner_email IS NOT NULL OR owner_phone IS NOT NULL)
         """
 
         params = {}
@@ -1045,14 +1046,14 @@ async def sync_businesses(
                 # Parse ISO8601 datetime string
                 from dateutil import parser
                 updated_dt = parser.isoparse(updated_since)
-                query += " AND submitted_at > :updated_since"
+                query += " AND COALESCE(updated_at, created_at) > :updated_since"
                 params['updated_since'] = updated_dt
             except Exception as e:
                 logger.warning(f"Invalid updated_since format: {updated_since}, error: {e}")
                 # Skip this filter if invalid format
 
         if state:
-            query += " AND business_state = :state"
+            query += " AND address_state = :state"
             params['state'] = state.upper()
 
         # Count total matching records
@@ -1061,7 +1062,7 @@ async def sync_businesses(
         total = count_result.scalar() or 0
 
         # Add pagination
-        query += " ORDER BY submitted_at DESC LIMIT :limit OFFSET :offset"
+        query += " ORDER BY COALESCE(updated_at, created_at) DESC LIMIT :limit OFFSET :offset"
         params['limit'] = limit
         params['offset'] = offset
 
@@ -1216,13 +1217,15 @@ async def get_halal_eateries(
              halal_status_val, is_favorite, is_food_truck, is_carry_out_only,
              is_cafe_bakery, has_many_locations, source, google_place_id, updated_at) = row
 
-            # In demo mode: redact contact info and operational details
+            # Always mask source - never expose internal source names (mda, mbc, etc.)
+            source = "community_sourced"
+
+            # In demo mode: also redact contact info and operational details
             if is_demo_mode:
                 phone = None
                 website = None
                 hours_raw = None
                 google_place_id = None
-                source = "community_verified"
 
             eatery = HalalEateryAPI(
                 eatery_id=str(eatery_id),
@@ -1336,9 +1339,11 @@ async def get_halal_markets(
             (market_id, name, cat, street, mcity, state, zip_code, lat, lng, phone, website,
              hours, rating, status, has_butcher, has_deli, sells_turkey, source, gplace, updated) = row
 
+            # Always mask source - never expose internal source names (mda, mbc, etc.)
+            source = "community_sourced"
+
             if is_demo_mode:
                 phone, website, hours, gplace = None, None, None, None
-                source = "community_verified"
 
             items.append(HalalMarketAPI(
                 market_id=str(market_id),
@@ -1428,9 +1433,10 @@ async def get_halal_places(
             result = await db.execute(text(eatery_sql), eatery_params)
             for row in result.fetchall():
                 (eid, name, cuisine, street, ecity, state, zip_code, lat, lng, phone, website, hours, rating, status, source, gplace, updated) = row
+                # Always mask source - never expose internal source names (mda, mbc, etc.)
+                source = "community_sourced"
                 if is_demo_mode:
                     phone, website, hours, gplace = None, None, None, None
-                    source = "community_verified"
                 items.append(HalalPlaceAPI(
                     place_id=str(eid), place_type="eatery", name=name, category=cuisine,
                     address=Address(street=street, city=ecity, state=state, zip=zip_code),
@@ -1456,9 +1462,10 @@ async def get_halal_places(
             result = await db.execute(text(market_sql), market_params)
             for row in result.fetchall():
                 (mid, name, cat, street, mcity, state, zip_code, lat, lng, phone, website, hours, rating, status, source, gplace, updated) = row
+                # Always mask source - never expose internal source names (mda, mbc, etc.)
+                source = "community_sourced"
                 if is_demo_mode:
                     phone, website, hours, gplace = None, None, None, None
-                    source = "community_verified"
                 items.append(HalalPlaceAPI(
                     place_id=str(mid), place_type="market", name=name, category=cat,
                     address=Address(street=street, city=mcity, state=state, zip=zip_code),
@@ -1516,7 +1523,7 @@ class DiscoveryRequest(BaseModel):
     business_industry: Optional[str] = None
     business_website: Optional[str] = None
     business_description: Optional[str] = None  # For FB posts, etc.
-    submitted_from: str = "manual_discovery"
+    submitted_from: str = "admin_manual"
     source_url: Optional[str] = None  # URL where business was discovered
     notes: Optional[str] = None
     muslim_owned: bool = True  # Default TRUE for manual discoveries
@@ -1999,7 +2006,13 @@ async def approve_businesses(
     approve_data: ApproveRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """Batch approve staging businesses and send discovery emails (admin only)."""
+    """Batch approve staging businesses and copy to business_canonical (admin only).
+
+    When a claim is approved:
+    1. Status is updated to 'approved' in business_claim_submissions
+    2. Business is copied to business_canonical with verified=TRUE
+    3. Discovery email is sent if applicable
+    """
     verify_internal_key(request)
     verify_admin_key(request)
 
@@ -2008,10 +2021,13 @@ async def approve_businesses(
         emails_sent = 0
 
         for claim_id in approve_data.claim_ids:
-            # Get business details
+            # Get full business details for copying to canonical
             select_query = text("""
                 SELECT claim_id, short_claim_id, business_name, business_city, business_state,
-                       owner_email, discovery_email_sent
+                       business_street_address, business_zip, business_phone, business_website,
+                       business_description, business_industry, latitude, longitude,
+                       owner_name, owner_email, owner_phone, muslim_owned,
+                       discovery_email_sent, submitted_from, source_url
                 FROM business_claim_submissions
                 WHERE claim_id = :claim_id AND status = 'staging'
             """)
@@ -2030,6 +2046,55 @@ async def approve_businesses(
                 WHERE claim_id = :claim_id
             """)
             await db.execute(update_query, {'claim_id': claim_id})
+
+            # Copy to business_canonical with verified=TRUE
+            canonical_query = text("""
+                INSERT INTO business_canonical (
+                    name, address_street, address_city, address_state, address_zip,
+                    latitude, longitude, phone, email, website, description,
+                    category, muslim_owned, owner_name, owner_email, owner_phone,
+                    verified, claim_id, source, source_ref, submitted_from, region
+                )
+                VALUES (
+                    :name, :address_street, :address_city, :address_state, :address_zip,
+                    :latitude, :longitude, :phone, :email, :website, :description,
+                    'service', :muslim_owned, :owner_name, :owner_email, :owner_phone,
+                    TRUE, :claim_id, 'claim_approved', :source_ref, :submitted_from, :region
+                )
+                ON CONFLICT (lower(name), lower(address_city), lower(address_state))
+                DO UPDATE SET
+                    verified = TRUE,
+                    claim_id = EXCLUDED.claim_id,
+                    owner_name = EXCLUDED.owner_name,
+                    owner_email = EXCLUDED.owner_email,
+                    owner_phone = EXCLUDED.owner_phone,
+                    phone = COALESCE(EXCLUDED.phone, business_canonical.phone),
+                    website = COALESCE(EXCLUDED.website, business_canonical.website),
+                    description = COALESCE(EXCLUDED.description, business_canonical.description),
+                    updated_at = NOW()
+            """)
+            await db.execute(canonical_query, {
+                'name': row.business_name,
+                'address_street': row.business_street_address,
+                'address_city': row.business_city,
+                'address_state': row.business_state,
+                'address_zip': row.business_zip,
+                'latitude': row.latitude,
+                'longitude': row.longitude,
+                'phone': row.business_phone,
+                'email': row.owner_email,
+                'website': row.business_website,
+                'description': row.business_description,
+                'muslim_owned': row.muslim_owned if row.muslim_owned is not None else True,
+                'owner_name': row.owner_name,
+                'owner_email': row.owner_email,
+                'owner_phone': row.owner_phone,
+                'claim_id': row.claim_id,
+                'source_ref': row.source_url,
+                'submitted_from': row.submitted_from,
+                'region': row.business_state or 'US'
+            })
+
             approved_count += 1
 
             # Send discovery email if not already sent and email is valid
@@ -2134,9 +2199,11 @@ async def get_masajid(
              offers_jumah, offers_daily, offers_quran, offers_school,
              verification, source, updated) = row
 
+            # Always mask source - never expose internal source names (mda, mbc, etc.)
+            source = "community_sourced"
+
             if is_demo_mode:
                 phone, website, email = None, None, None
-                source = "community_verified"
 
             items.append(MasjidAPI(
                 masjid_id=str(masjid_id),

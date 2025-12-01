@@ -399,7 +399,7 @@ Applied to fields:
 - Scripts in `scripts/` (gitignored - contain scraping logic)
 - Cron job on Raspberry Pi: `cron_approve_and_notify.py`
 - Discovery email tracking: `discovery_email_sent`, `discovery_email_sent_at` columns
-- `submitted_from` field tracks source (e.g., `mbc_import`, `web`)
+- `submitted_from` field tracks how data entered the system (see ADR-021)
 
 **Email Flow:**
 - Web submissions → immediate confirmation email
@@ -413,6 +413,43 @@ Applied to fields:
 ✅ Easy opt-out (reply to remove)
 ❌ Scrape scripts not version controlled (intentional)
 ❌ Dependent on external directory availability
+
+---
+
+## ADR-021: Standardized submitted_from Values
+**Date:** Nov 2025 | **Status:** Accepted
+
+**Context:** The `submitted_from` column was being used inconsistently across tables. In some cases it duplicated the `source` column (e.g., `mbc_import`, `muslimlistings_import`), making it redundant.
+
+**Decision:** Standardize `submitted_from` to track HOW data entered the system, not WHERE it came from:
+
+| Value | Meaning | Used By |
+|-------|---------|---------|
+| `scraper` | Automated scraper ingestion | unified_ingest.py |
+| `claim_portal` | User self-submitted claim | claim.prowasl.com |
+| `admin_manual` | Admin added manually | validation.html |
+
+**Distinction from `source` column:**
+- `source` (enum): WHERE data originated (e.g., `mda_import`, `muslimlistings_import`, `claim_approved`)
+- `submitted_from` (varchar): HOW it entered the system (e.g., `scraper`, `claim_portal`, `admin_manual`)
+
+**Migration Applied:**
+```sql
+-- business_claim_submissions
+UPDATE business_claim_submissions SET submitted_from = 'claim_portal' WHERE submitted_from = 'web';
+UPDATE business_claim_submissions SET submitted_from = 'admin_manual' WHERE submitted_from = 'facebook_group';
+
+-- business_canonical
+UPDATE business_canonical SET submitted_from = 'claim_portal' WHERE submitted_from = 'web';
+UPDATE business_canonical SET submitted_from = 'admin_manual' WHERE submitted_from = 'facebook_group';
+UPDATE business_canonical SET submitted_from = 'scraper' WHERE submitted_from LIKE '%_import';
+```
+
+**Consequences:**
+✅ Clear separation of concerns (source vs entry method)
+✅ Useful for analytics (how are businesses entering the system?)
+✅ Generic values work across all sites/apps
+❌ Required one-time migration of existing data
 
 ---
 
