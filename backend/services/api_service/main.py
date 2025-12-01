@@ -980,40 +980,52 @@ async def get_business_counter(
     """
     Get live business counter with dynamic goal scaling
 
-    Counts all businesses in business_canonical table.
-    Goal doubles automatically: 1000 → 2000 → 4000 → 8000...
+    Counts user-submitted claims from business_claim_submissions table.
+    Only counts claims from claim_portal (not scraped data).
+    Goal doubles automatically: 100 → 250 → 500 → 1000...
     """
     try:
-        # Count all businesses from business_canonical
+        # Count user-submitted claims only (not scraped data)
         count_query = """
             SELECT COUNT(*) as count
-            FROM business_canonical
+            FROM business_claim_submissions
+            WHERE submitted_from = 'claim_portal'
         """
 
         result = await db.execute(text(count_query))
         count_row = result.fetchone()
         count = count_row.count if count_row else 0
 
-        # Dynamic goal scaling for larger dataset
-        # 1000 → 2000 → 5000 → 10000...
-        if count < 1000:
+        # Dynamic goal scaling for user-submitted claims
+        # 50 → 100 → 250 → 500 → 1000...
+        if count < 50:
+            goal = 50
+            title = "Getting Started"
+            message = f"{count} / {goal} businesses"
+            subtitle = "Help us grow the Muslim business directory."
+        elif count < 100:
+            goal = 100
+            title = "First 100"
+            message = f"{count} / {goal} businesses"
+            subtitle = "Growing the Muslim business directory."
+        elif count < 250:
+            goal = 250
+            title = "Building Momentum"
+            message = f"{count} / {goal} businesses"
+            subtitle = "The directory is growing!"
+        elif count < 500:
+            goal = 500
+            title = "500 Milestone"
+            message = f"{count} / {goal} businesses"
+            subtitle = "Building comprehensive coverage."
+        elif count < 1000:
             goal = 1000
-            title = "Building the Directory"
-            message = f"{count:,} / {goal:,} businesses"
-            subtitle = "Growing the largest Muslim-owned business directory."
-        elif count < 2000:
-            goal = 2000
             title = "Nationwide Expansion"
             message = f"{count:,} / {goal:,} businesses"
             subtitle = "Expanding across all 50 states."
-        elif count < 5000:
-            goal = 5000
-            title = "5K Milestone"
-            message = f"{count:,} / {goal:,} businesses"
-            subtitle = "Building comprehensive coverage nationwide."
         else:
-            # After 5000, double each time: 10000, 20000...
-            goal = 5000
+            # After 1000, double each time: 2000, 4000...
+            goal = 1000
             while count >= goal:
                 goal *= 2
             title = "Growing Directory"
