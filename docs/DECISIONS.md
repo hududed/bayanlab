@@ -671,4 +671,83 @@ claim.prowasl.com (unified form)
 
 ---
 
+## ADR-024: API Access After Demo Mode Removal
+**Date:** Dec 2025 | **Status:** Implemented
+
+**Context:** BayanLab API previously had a "demo" tier that allowed unauthenticated access to data endpoints with rate limiting. This was removed to enforce proper API key authentication for all data access.
+
+**Decision:** All data endpoints now require valid API key authentication. No demo/anonymous access.
+
+### Endpoint Access Tiers
+
+| Endpoint | Auth Required | Notes |
+|----------|---------------|-------|
+| `/health` | No | Health check, always public |
+| `/v1/stats` | No | Aggregate stats only (counts) |
+| `/v1/coverage` | No | Coverage regions only |
+| `/v1/businesses/counter` | No | Claim counter for landing page |
+| `/v1/events` | **Yes** | Events data requires API key |
+| `/v1/masajid` | **Yes** | Mosque data requires API key |
+| `/v1/halal-eateries` | **Yes** | Eatery data requires API key |
+| `/v1/halal-markets` | **Yes** | Market data requires API key |
+| `/v1/businesses` | **Yes** | Business data requires API key |
+| `/v1/businesses/claim` | No | POST only, for claim submissions |
+
+### How bayanlab-web Should Interact
+
+**Before (with demo mode):**
+```javascript
+// Could fetch without API key
+const response = await fetch('https://api.bayanlab.com/v1/masajid?region=CO');
+```
+
+**After (no demo mode):**
+```javascript
+// Must include API key in header
+const response = await fetch('https://api.bayanlab.com/v1/masajid?region=CO', {
+  headers: {
+    'X-API-Key': process.env.BAYANLAB_API_KEY
+  }
+});
+```
+
+**Frontend Handling:**
+1. API keys should be stored server-side (environment variables)
+2. Frontend should call your own backend, which proxies to BayanLab API
+3. Never expose API keys in client-side JavaScript
+4. For public pages showing aggregate stats, use the public endpoints (`/v1/stats`, `/v1/coverage`)
+
+**Error Responses:**
+- `401 Unauthorized` - Missing or invalid API key
+- `403 Forbidden` - API key doesn't have access to requested tier/dataset
+
+### Response Format - No Total Count
+
+**Important:** Data endpoints (`/v1/masajid`, `/v1/halal-eateries`, `/v1/halal-markets`) intentionally do NOT include a `total` count in the response. This is to avoid exposing dataset size directly in the API response.
+
+**Response format:**
+```json
+{
+  "version": "1.0",
+  "region": "NY",
+  "access_tier": "full",
+  "items": [...]
+}
+```
+
+**For frontends that need counts:**
+- Use `items.length` from the response (if fetching all data)
+- Use the public `/v1/stats` endpoint for aggregate counts across all regions
+
+**Consequences:**
+✅ Proper access control for data endpoints
+✅ Usage tracking per API key
+✅ Clear separation between public stats and protected data
+✅ Dataset size not exposed in API responses
+❌ Breaking change for existing consumers without API keys
+❌ Requires backend proxy for frontend apps
+❌ Frontends must use `items.length` or `/v1/stats` for counts
+
+---
+
 **Maintained by:** BayanLab Engineering

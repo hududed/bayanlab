@@ -251,6 +251,51 @@ class BusinessSyncResponse(BaseModel):
     pagination: Dict[str, Any]
 
 
+# Public stats/coverage models (FREE tier - no API key required)
+class StatsResponse(BaseModel):
+    """Aggregate counts for all datasets - public endpoint"""
+    version: str = "1.0"
+    masajid_count: int
+    eateries_count: int
+    markets_count: int
+    businesses_count: int
+    total_listings: int
+
+
+class RegionCounts(BaseModel):
+    """Counts per dataset for a region"""
+    masajid: int = 0
+    eateries: int = 0
+    markets: int = 0
+    businesses: int = 0
+
+
+class CoverageResponse(BaseModel):
+    """Coverage map showing which regions have data - public endpoint"""
+    version: str = "1.0"
+    regions: List[str]
+    counts_by_region: Dict[str, RegionCounts]
+
+
+# Preview models - limited fields for teaser (FREE tier)
+class PreviewListing(BaseModel):
+    """Teaser listing with limited fields - no contact info"""
+    name: str
+    city: str
+    state: str
+    category: str  # 'masjid', 'eatery', 'market', 'business'
+
+
+class PreviewResponse(BaseModel):
+    """Sample listings for directory teaser - public endpoint"""
+    version: str = "1.0"
+    region: str
+    total_in_region: int
+    sample_size: int
+    samples: Dict[str, List[PreviewListing]]  # {'masajid': [...], 'eateries': [...], ...}
+    message: str = "Get full data with API access"
+
+
 # Initialize FastAPI
 app = FastAPI(
     title="BayanLab Community Data Backbone API",
@@ -478,6 +523,247 @@ bayanlab_businesses_total {businesses_count}
             content="# Metrics unavailable\n",
             media_type="text/plain"
         )
+
+
+# ============================================================
+# FREE TIER PUBLIC ENDPOINTS (no API key required)
+# ============================================================
+
+@app.get("/v1/stats", response_model=StatsResponse, tags=["Public"])
+@limiter.limit("10/minute")
+async def get_stats(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get aggregate counts for all datasets (FREE tier - no API key required).
+
+    This endpoint provides total counts without exposing actual data.
+    Use this for directory landing pages showing "X masajid, Y eateries, etc."
+    """
+    try:
+        # Query counts from all tables (only verified/validated records)
+        masajid_result = await db.execute(text(
+            "SELECT COUNT(*) FROM masajid WHERE verification_status = 'verified'"
+        ))
+        eateries_result = await db.execute(text(
+            "SELECT COUNT(*) FROM halal_eateries WHERE halal_status = 'validated'"
+        ))
+        markets_result = await db.execute(text(
+            "SELECT COUNT(*) FROM halal_markets WHERE halal_status = 'validated'"
+        ))
+        businesses_result = await db.execute(text(
+            "SELECT COUNT(*) FROM business_canonical WHERE verified = TRUE"
+        ))
+
+        masajid_count = masajid_result.scalar() or 0
+        eateries_count = eateries_result.scalar() or 0
+        markets_count = markets_result.scalar() or 0
+        businesses_count = businesses_result.scalar() or 0
+
+        return StatsResponse(
+            masajid_count=masajid_count,
+            eateries_count=eateries_count,
+            markets_count=markets_count,
+            businesses_count=businesses_count,
+            total_listings=masajid_count + eateries_count + markets_count + businesses_count
+        )
+
+    except Exception as e:
+        logger.error(f"Stats endpoint failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch stats")
+
+
+@app.get("/v1/coverage", response_model=CoverageResponse, tags=["Public"])
+@limiter.limit("10/minute")
+async def get_coverage(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get coverage map showing which regions have data (FREE tier - no API key required).
+
+    Returns list of regions with data and counts per dataset per region.
+    Use this for showing "Data available in CO, TX, CA, NY..." on landing pages.
+    """
+    try:
+        # Get counts by region for each table
+        masajid_by_region = await db.execute(text("""
+            SELECT address_state, COUNT(*)
+            FROM masajid
+            WHERE verification_status = 'verified' AND address_state IS NOT NULL
+            GROUP BY address_state
+        """))
+        eateries_by_region = await db.execute(text("""
+            SELECT address_state, COUNT(*)
+            FROM halal_eateries
+            WHERE halal_status = 'validated' AND address_state IS NOT NULL
+            GROUP BY address_state
+        """))
+        markets_by_region = await db.execute(text("""
+            SELECT address_state, COUNT(*)
+            FROM halal_markets
+            WHERE halal_status = 'validated' AND address_state IS NOT NULL
+            GROUP BY address_state
+        """))
+        businesses_by_region = await db.execute(text("""
+            SELECT address_state, COUNT(*)
+            FROM business_canonical
+            WHERE verified = TRUE AND address_state IS NOT NULL
+            GROUP BY address_state
+        """))
+
+        # Build counts_by_region dict
+        counts_by_region: Dict[str, RegionCounts] = {}
+
+        for row in masajid_by_region.fetchall():
+            region, count = row
+            if region not in counts_by_region:
+                counts_by_region[region] = RegionCounts()
+            counts_by_region[region].masajid = count
+
+        for row in eateries_by_region.fetchall():
+            region, count = row
+            if region not in counts_by_region:
+                counts_by_region[region] = RegionCounts()
+            counts_by_region[region].eateries = count
+
+        for row in markets_by_region.fetchall():
+            region, count = row
+            if region not in counts_by_region:
+                counts_by_region[region] = RegionCounts()
+            counts_by_region[region].markets = count
+
+        for row in businesses_by_region.fetchall():
+            region, count = row
+            if region not in counts_by_region:
+                counts_by_region[region] = RegionCounts()
+            counts_by_region[region].businesses = count
+
+        # Sort regions by total count (descending)
+        regions_sorted = sorted(
+            counts_by_region.keys(),
+            key=lambda r: (
+                counts_by_region[r].masajid +
+                counts_by_region[r].eateries +
+                counts_by_region[r].markets +
+                counts_by_region[r].businesses
+            ),
+            reverse=True
+        )
+
+        return CoverageResponse(
+            regions=regions_sorted,
+            counts_by_region=counts_by_region
+        )
+
+    except Exception as e:
+        logger.error(f"Coverage endpoint failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch coverage")
+
+
+@app.get("/v1/preview", response_model=PreviewResponse, tags=["Public"])
+@limiter.limit("10/minute")
+async def get_preview(
+    request: Request,
+    region: str = Query("CO", description="Region/state code (e.g., CO, TX, NY)"),
+    limit: int = Query(5, ge=1, le=10, description="Sample size per category (max 10)"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get sample listings for directory teaser (FREE tier - no API key required).
+
+    Returns limited fields (name, city, state) for a small sample of listings.
+    No contact info (phone, email, website, address) - that requires API access.
+
+    Use this for directory preview pages like /directory/co showing:
+    - "Showing 5 of 53 Masajid in Colorado"
+    - Sample names to demonstrate data quality
+    """
+    try:
+        samples: Dict[str, List[PreviewListing]] = {
+            'masajid': [],
+            'eateries': [],
+            'markets': [],
+            'businesses': []
+        }
+        total = 0
+
+        # Sample masajid
+        masajid_result = await db.execute(text("""
+            SELECT name, address_city, address_state
+            FROM masajid
+            WHERE verification_status = 'verified' AND address_state = :region
+            ORDER BY name
+            LIMIT :limit
+        """), {"region": region, "limit": limit})
+        for row in masajid_result.fetchall():
+            samples['masajid'].append(PreviewListing(
+                name=row[0], city=row[1] or '', state=row[2] or region, category='masjid'
+            ))
+
+        # Sample eateries
+        eateries_result = await db.execute(text("""
+            SELECT name, address_city, address_state
+            FROM halal_eateries
+            WHERE halal_status = 'validated' AND address_state = :region
+            ORDER BY name
+            LIMIT :limit
+        """), {"region": region, "limit": limit})
+        for row in eateries_result.fetchall():
+            samples['eateries'].append(PreviewListing(
+                name=row[0], city=row[1] or '', state=row[2] or region, category='eatery'
+            ))
+
+        # Sample markets
+        markets_result = await db.execute(text("""
+            SELECT name, address_city, address_state
+            FROM halal_markets
+            WHERE halal_status = 'validated' AND address_state = :region
+            ORDER BY name
+            LIMIT :limit
+        """), {"region": region, "limit": limit})
+        for row in markets_result.fetchall():
+            samples['markets'].append(PreviewListing(
+                name=row[0], city=row[1] or '', state=row[2] or region, category='market'
+            ))
+
+        # Sample businesses
+        businesses_result = await db.execute(text("""
+            SELECT name, address_city, address_state
+            FROM business_canonical
+            WHERE verified = TRUE AND address_state = :region
+            ORDER BY name
+            LIMIT :limit
+        """), {"region": region, "limit": limit})
+        for row in businesses_result.fetchall():
+            samples['businesses'].append(PreviewListing(
+                name=row[0], city=row[1] or '', state=row[2] or region, category='business'
+            ))
+
+        # Get total count for region
+        count_result = await db.execute(text("""
+            SELECT
+                (SELECT COUNT(*) FROM masajid WHERE verification_status = 'verified' AND address_state = :region) +
+                (SELECT COUNT(*) FROM halal_eateries WHERE halal_status = 'validated' AND address_state = :region) +
+                (SELECT COUNT(*) FROM halal_markets WHERE halal_status = 'validated' AND address_state = :region) +
+                (SELECT COUNT(*) FROM business_canonical WHERE verified = TRUE AND address_state = :region)
+        """), {"region": region})
+        total = count_result.scalar() or 0
+
+        sample_count = sum(len(v) for v in samples.values())
+
+        return PreviewResponse(
+            region=region,
+            total_in_region=total,
+            sample_size=sample_count,
+            samples=samples,
+            message=f"Showing {sample_count} of {total} listings. Get full data with API access."
+        )
+
+    except Exception as e:
+        logger.error(f"Preview endpoint failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch preview")
 
 
 @app.get("/v1/events", response_model=EventsResponse, tags=["Events"])
