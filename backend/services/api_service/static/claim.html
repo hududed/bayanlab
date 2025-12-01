@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Add Your Business - BayanLab</title>
+    <title>Join ProWasl - BayanLab</title>
     <style>
         * {
             margin: 0;
@@ -25,14 +25,14 @@
             background: white;
             border-radius: 16px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            max-width: 500px;
+            max-width: 600px;
             width: 100%;
             padding: 40px 32px;
         }
 
         .header {
             text-align: center;
-            margin-bottom: 32px;
+            margin-bottom: 24px;
         }
 
         .header h1 {
@@ -44,6 +44,41 @@
         .header p {
             color: #718096;
             font-size: 14px;
+        }
+
+        /* Type Toggle Styles */
+        .type-toggle {
+            display: flex;
+            background: #f7fafc;
+            border-radius: 12px;
+            padding: 6px;
+            margin-bottom: 24px;
+        }
+
+        .type-toggle label {
+            flex: 1;
+            text-align: center;
+            padding: 14px 16px;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.2s;
+            font-weight: 500;
+            color: #718096;
+            margin-bottom: 0;
+        }
+
+        .type-toggle input[type="radio"] {
+            display: none;
+        }
+
+        .type-toggle input[type="radio"]:checked + label {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .type-toggle label:hover:not(.active) {
+            background: #edf2f7;
         }
 
         .form-group {
@@ -117,6 +152,7 @@
         button:disabled {
             opacity: 0.6;
             cursor: not-allowed;
+            transform: none;
         }
 
         .success {
@@ -150,7 +186,7 @@
             background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
             border-radius: 12px;
             padding: 24px;
-            margin-bottom: 32px;
+            margin-bottom: 24px;
             text-align: center;
             color: white;
             box-shadow: 0 4px 12px rgba(72, 187, 120, 0.3);
@@ -196,36 +232,211 @@
             opacity: 0.6;
             font-size: 14px;
         }
+
+        /* Skills Multi-Select */
+        .skills-container {
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .skills-category {
+            margin-bottom: 16px;
+        }
+
+        .skills-category:last-child {
+            margin-bottom: 0;
+        }
+
+        .skills-category-title {
+            font-weight: 600;
+            color: #4a5568;
+            font-size: 13px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .skills-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .skill-chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 6px 12px;
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 20px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .skill-chip:hover {
+            background: #edf2f7;
+        }
+
+        .skill-chip.selected {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: transparent;
+        }
+
+        .skill-chip input {
+            display: none;
+        }
+
+        .skill-chip.licensed::after {
+            content: "License may be required";
+            font-size: 10px;
+            margin-left: 4px;
+            opacity: 0.7;
+        }
+
+        /* Section dividers */
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #2d3748;
+            margin: 24px 0 16px 0;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        /* Conditional fields */
+        .business-only, .individual-only {
+            transition: opacity 0.3s, max-height 0.3s;
+            overflow: hidden;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Availability checkboxes */
+        .availability-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .availability-option {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+
+        .availability-option input {
+            width: auto;
+        }
+
+        /* Disclaimer box */
+        .disclaimer {
+            background: #fffbeb;
+            border: 1px solid #f6e05e;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            color: #744210;
+        }
+
+        .disclaimer strong {
+            color: #975a16;
+        }
+
+        /* Small helper text */
+        small {
+            color: #a0aec0;
+            font-size: 12px;
+            display: block;
+            margin-top: 4px;
+        }
+
+        /* Service area slider */
+        .service-area-display {
+            text-align: center;
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: #e2e8f0;
+            outline: none;
+            padding: 0;
+            border: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(102, 126, 234, 0.4);
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>Add Your Business</h1>
-            <p>Join ProWasl's Muslim business directory</p>
+            <h1>Join ProWasl</h1>
+            <p>Connect with the Muslim community</p>
         </div>
 
-        <!-- Business Counter Banner -->
+        <!-- Counter Banner -->
         <div id="counter-banner" class="counter-banner">
-            <h2>🚀 Be a Founding Business</h2>
+            <h2>Be Part of Our Growing Community</h2>
             <div class="counter-loading">Loading...</div>
         </div>
 
         <div id="success-message" class="success">
-            ✓ Thank you! Your business has been submitted successfully.
+            Thank you! Your submission has been received successfully.
         </div>
 
         <div id="error-message" class="error"></div>
 
+        <!-- Type Toggle -->
+        <div class="type-toggle">
+            <input type="radio" name="provider_type" id="type-business" value="business" checked>
+            <label for="type-business">I'm a Business</label>
+            <input type="radio" name="provider_type" id="type-individual" value="individual">
+            <label for="type-individual">I'm an Individual/Tasker</label>
+        </div>
+
         <form id="claim-form">
+            <!-- Hidden field to store provider type -->
+            <input type="hidden" name="provider_type" id="provider_type_hidden" value="business">
+
+            <!-- ========== ABOUT YOU ========== -->
+            <div class="section-title">About You</div>
+
             <div class="form-group">
                 <label>Your Name <span class="required">*</span></label>
-                <input type="text" name="owner_name" required placeholder="John Smith">
+                <input type="text" name="owner_name" required placeholder="Ahmed Khan">
+            </div>
+
+            <div class="form-group individual-only hidden">
+                <label>Display Name <span class="optional">(shown to customers)</span></label>
+                <input type="text" name="display_name" placeholder="Ahmed K.">
+                <small>TaskRabbit-style: First name + last initial for privacy</small>
             </div>
 
             <div class="form-group">
                 <label>Your Email <span class="required">*</span></label>
-                <input type="email" name="owner_email" required placeholder="john@example.com">
+                <input type="email" name="owner_email" required placeholder="ahmed@example.com">
             </div>
 
             <div class="form-group">
@@ -234,9 +445,60 @@
             </div>
 
             <div class="form-group">
-                <label>Business Name <span class="required">*</span></label>
-                <input type="text" name="business_name" required placeholder="ABC Construction">
+                <label>WhatsApp Number <span class="optional">(optional)</span></label>
+                <input type="tel" name="business_whatsapp" placeholder="(303) 555-1234">
+                <small>Many customers prefer WhatsApp</small>
             </div>
+
+            <!-- ========== BUSINESS INFO (Business Only) ========== -->
+            <div class="business-only">
+                <div class="section-title">Business Information</div>
+
+                <div class="form-group">
+                    <label>Business Name <span class="required">*</span></label>
+                    <input type="text" name="business_name" id="business_name" placeholder="ABC Construction LLC">
+                </div>
+
+                <div class="form-group">
+                    <label>Street Address <span class="optional">(optional)</span></label>
+                    <input type="text" name="business_street_address" placeholder="123 Main Street">
+                    <small>Helps customers find your location</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Website <span class="optional">(optional)</span></label>
+                    <input type="url" name="business_website" placeholder="https://example.com">
+                </div>
+
+                <div class="form-group">
+                    <label>Industry <span class="required">*</span></label>
+                    <select name="business_industry" id="business_industry">
+                        <option value="">Select your industry...</option>
+                        <option value="Construction & Home Services">Construction & Home Services</option>
+                        <option value="Consulting">Consulting</option>
+                        <option value="Real Estate">Real Estate</option>
+                        <option value="Healthcare">Healthcare</option>
+                        <option value="Legal Services">Legal Services</option>
+                        <option value="Finance & Accounting">Finance & Accounting</option>
+                        <option value="Food & Restaurant">Food & Restaurant</option>
+                        <option value="Retail & E-commerce">Retail & E-commerce</option>
+                        <option value="Technology & IT">Technology & IT</option>
+                        <option value="Education & Tutoring">Education & Tutoring</option>
+                        <option value="Marketing & Design">Marketing & Design</option>
+                        <option value="Islamic Services">Islamic Services</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+
+                <div class="form-group hidden" id="other_industry_group">
+                    <label>Please specify your industry <span class="required">*</span></label>
+                    <input type="text" name="business_industry_other" id="business_industry_other"
+                           placeholder="e.g., Halal certification, Heavy equipment sales, etc.">
+                </div>
+            </div>
+
+            <!-- ========== LOCATION ========== -->
+            <div class="section-title">Location</div>
 
             <div class="form-group">
                 <label>City <span class="required">*</span></label>
@@ -245,13 +507,7 @@
 
             <div class="form-group">
                 <label>State <span class="required">*</span></label>
-                <input type="text" name="business_state" required value="CO" maxlength="2" pattern="[A-Z]{2}">
-            </div>
-
-            <div class="form-group">
-                <label>Street Address <span class="optional">(optional)</span></label>
-                <input type="text" name="business_street_address" placeholder="123 Main Street">
-                <small style="color: #a0aec0; font-size: 12px;">Helps customers find your business location</small>
+                <input type="text" name="business_state" required value="CO" maxlength="2" pattern="[A-Za-z]{2}" style="text-transform: uppercase;">
             </div>
 
             <div class="form-group">
@@ -260,57 +516,215 @@
             </div>
 
             <div class="form-group">
-                <label>Industry <span class="required">*</span></label>
-                <select name="business_industry" id="business_industry" required>
-                    <option value="">Select your industry...</option>
-                    <option value="Construction & Home Services">Construction & Home Services</option>
-                    <option value="Consulting">Consulting</option>
-                    <option value="Real Estate">Real Estate</option>
-                    <option value="Healthcare">Healthcare</option>
-                    <option value="Legal Services">Legal Services</option>
-                    <option value="Finance & Accounting">Finance & Accounting</option>
-                    <option value="Food & Restaurant">Food & Restaurant</option>
-                    <option value="Retail & E-commerce">Retail & E-commerce</option>
-                    <option value="Technology & IT">Technology & IT</option>
-                    <option value="Education & Tutoring">Education & Tutoring</option>
-                    <option value="Marketing & Design">Marketing & Design</option>
-                    <option value="Other">Other</option>
-                </select>
+                <label>Service Area</label>
+                <div class="service-area-display" id="service-area-display">25 miles</div>
+                <input type="range" name="service_area_miles" id="service_area_miles" min="5" max="100" value="25" step="5">
+                <small>How far are you willing to travel for jobs?</small>
             </div>
 
-            <div class="form-group" id="other_industry_group" style="display: none;">
-                <label>Please specify your industry <span class="required">*</span></label>
-                <input type="text" name="business_industry_other" id="business_industry_other"
-                       placeholder="e.g., Halal certification, Heavy equipment sales, etc.">
-                <small style="color: #666; display: block; margin-top: 4px;">
-                    Be as specific as possible to help us categorize your business correctly.
-                </small>
+            <!-- ========== INDIVIDUAL TASKER INFO ========== -->
+            <div class="individual-only hidden">
+                <div class="section-title">Your Rates & Availability</div>
+
+                <div class="form-group">
+                    <label>Hourly Rate Range <span class="optional">(optional)</span></label>
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <span>$</span>
+                        <input type="number" name="hourly_rate_min" placeholder="25" min="0" style="width: 80px;">
+                        <span>to $</span>
+                        <input type="number" name="hourly_rate_max" placeholder="50" min="0" style="width: 80px;">
+                        <span>/hr</span>
+                    </div>
+                    <small>Leave blank if rates vary by task</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Availability</label>
+                    <div class="availability-options">
+                        <label class="availability-option">
+                            <input type="checkbox" name="availability" value="weekday_morning">
+                            Weekday Mornings
+                        </label>
+                        <label class="availability-option">
+                            <input type="checkbox" name="availability" value="weekday_afternoon">
+                            Weekday Afternoons
+                        </label>
+                        <label class="availability-option">
+                            <input type="checkbox" name="availability" value="weekday_evening">
+                            Weekday Evenings
+                        </label>
+                        <label class="availability-option">
+                            <input type="checkbox" name="availability" value="weekend">
+                            Weekends
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== SKILLS/SERVICES ========== -->
+            <div class="section-title">Skills & Services</div>
+
+            <div class="form-group">
+                <label>What can you help with? <span class="required">*</span></label>
+                <div class="skills-container" id="skills-container">
+                    <!-- Assembly -->
+                    <div class="skills-category">
+                        <div class="skills-category-title">Assembly</div>
+                        <div class="skills-list">
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="furniture_assembly">General Furniture</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="ikea_assembly">IKEA Assembly</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="crib_assembly">Crib Assembly</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="desk_assembly">Desk Assembly</label>
+                        </div>
+                    </div>
+
+                    <!-- Mounting -->
+                    <div class="skills-category">
+                        <div class="skills-category-title">Mounting</div>
+                        <div class="skills-list">
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="tv_mounting">TV Mounting</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="art_mounting">Art & Mirror Hanging</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="shelf_install">Shelves & Hooks</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="blinds_install">Blinds & Windows</label>
+                        </div>
+                    </div>
+
+                    <!-- Moving -->
+                    <div class="skills-category">
+                        <div class="skills-category-title">Moving</div>
+                        <div class="skills-list">
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="help_moving">Help Moving</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="heavy_lifting">Heavy Lifting</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="furniture_rearrange">Rearrange Furniture</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="junk_removal">Junk Removal</label>
+                        </div>
+                    </div>
+
+                    <!-- Cleaning -->
+                    <div class="skills-category">
+                        <div class="skills-category-title">Cleaning</div>
+                        <div class="skills-list">
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="general_cleaning">General Cleaning</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="deep_clean">Deep Clean</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="move_out_clean">Move Out Clean</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="garage_cleaning">Garage Cleaning</label>
+                        </div>
+                    </div>
+
+                    <!-- Outdoor -->
+                    <div class="skills-category">
+                        <div class="skills-category-title">Outdoor Help</div>
+                        <div class="skills-list">
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="yard_work">Yard Work</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="lawn_care">Lawn Care</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="landscaping">Landscaping</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="gutter_cleaning">Gutter Cleaning</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="snow_removal">Snow Removal</label>
+                        </div>
+                    </div>
+
+                    <!-- Home Repairs -->
+                    <div class="skills-category">
+                        <div class="skills-category-title">Home Repairs</div>
+                        <div class="skills-list">
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="furniture_repair">Furniture Repair</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="wall_repair">Wall Repair</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="door_repair">Door & Cabinet Repair</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="flooring_help">Flooring Help</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="light_carpentry">Light Carpentry</label>
+                            <label class="skill-chip licensed"><input type="checkbox" name="skills" value="electrical_help">Electrical Help</label>
+                            <label class="skill-chip licensed"><input type="checkbox" name="skills" value="plumbing_help">Plumbing Help</label>
+                        </div>
+                    </div>
+
+                    <!-- Painting -->
+                    <div class="skills-category">
+                        <div class="skills-category-title">Painting</div>
+                        <div class="skills-list">
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="indoor_painting">Indoor Painting</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="outdoor_painting">Outdoor Painting</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="accent_wall">Accent Wall</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="wallpaper">Wallpapering</label>
+                        </div>
+                    </div>
+
+                    <!-- General -->
+                    <div class="skills-category">
+                        <div class="skills-category-title">General Help</div>
+                        <div class="skills-list">
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="personal_assistant">Personal Assistant</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="errands">Errand Running</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="donation_dropoff">Donation Drop-off</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="waiting_in_line">Waiting in Line</label>
+                        </div>
+                    </div>
+
+                    <!-- Muslim-Specific: Islamic Education -->
+                    <div class="skills-category">
+                        <div class="skills-category-title">Islamic Education</div>
+                        <div class="skills-list">
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="quran_classes">Quran Classes</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="arabic_classes">Arabic Language</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="islamic_studies">Islamic Studies</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="kids_islamic_education">Children's Islamic Education</label>
+                        </div>
+                    </div>
+
+                    <!-- Muslim-Specific: Halal Food -->
+                    <div class="skills-category">
+                        <div class="skills-category-title">Halal Food Services</div>
+                        <div class="skills-list">
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="halal_catering">Halal Catering</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="halal_meat_delivery">Halal Meat Delivery</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="zabiha_services">Zabiha Services</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="halal_certification">Halal Certification Consulting</label>
+                        </div>
+                    </div>
+
+                    <!-- Muslim-Specific: Tailoring -->
+                    <div class="skills-category">
+                        <div class="skills-category-title">Modest Fashion & Tailoring</div>
+                        <div class="skills-list">
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="hijab_styling">Hijab Styling</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="modest_tailoring">Modest Clothing Tailoring</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="abaya_thobe">Abaya/Thobe Tailoring</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="wedding_alterations">Wedding Dress Modifications</label>
+                        </div>
+                    </div>
+
+                    <!-- Muslim-Specific: Events -->
+                    <div class="skills-category">
+                        <div class="skills-category-title">Islamic Events</div>
+                        <div class="skills-list">
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="nikah_planning">Nikah Planning</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="walima_catering">Walima Catering</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="aqeeqah_services">Aqeeqah Services</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="islamic_photography">Islamic Event Photography</label>
+                            <label class="skill-chip"><input type="checkbox" name="skills" value="islamic_calligraphy">Islamic Calligraphy</label>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="form-group">
-                <label>Website <span class="optional">(optional)</span></label>
-                <input type="url" name="business_website" placeholder="https://example.com">
+                <label>Tell us more about your services <span class="optional">(optional)</span></label>
+                <textarea name="business_description" placeholder="Describe your experience, specialties, or anything else customers should know..."></textarea>
             </div>
 
-            <div class="form-group">
-                <label>WhatsApp Number <span class="optional">(optional)</span></label>
-                <input type="tel" name="business_whatsapp" placeholder="(303) 555-1234">
-                <small style="color: #a0aec0; font-size: 12px;">Many customers prefer WhatsApp - can be same as your phone</small>
-            </div>
-
-            <div class="form-group">
-                <label>What services do you offer? <span class="optional">(optional)</span></label>
-                <textarea name="business_description" placeholder="Home remodeling, kitchen renovations, bathroom upgrades..."></textarea>
-            </div>
-
+            <!-- ========== FINAL OPTIONS ========== -->
             <div class="form-group">
                 <label style="display: flex; align-items: center; cursor: pointer;">
-                    <input type="checkbox" name="muslim_owned" style="width: auto; margin-right: 8px;">
-                    <span>This is a Muslim-owned business</span>
+                    <input type="checkbox" name="muslim_owned" style="width: auto; margin-right: 8px;" checked>
+                    <span>I am Muslim / This is a Muslim-owned business</span>
                 </label>
             </div>
 
-            <button type="submit" id="submit-btn">Submit Business</button>
+            <!-- Disclaimer -->
+            <div class="disclaimer">
+                <strong>Important:</strong> Some services (electrical, plumbing, HVAC, etc.) may require professional licensing in your state. By registering, you confirm you have appropriate credentials for licensed work.
+            </div>
+
+            <button type="submit" id="submit-btn">Join ProWasl</button>
         </form>
 
         <div class="footer">
@@ -325,7 +739,63 @@
         const errorMsg = document.getElementById('error-message');
         const counterBanner = document.getElementById('counter-banner');
 
-        // Fetch and display business counter
+        // Type toggle elements
+        const typeBusiness = document.getElementById('type-business');
+        const typeIndividual = document.getElementById('type-individual');
+        const providerTypeHidden = document.getElementById('provider_type_hidden');
+        const businessOnlyFields = document.querySelectorAll('.business-only');
+        const individualOnlyFields = document.querySelectorAll('.individual-only');
+        const businessNameInput = document.getElementById('business_name');
+        const businessIndustrySelect = document.getElementById('business_industry');
+
+        // Service area slider
+        const serviceAreaSlider = document.getElementById('service_area_miles');
+        const serviceAreaDisplay = document.getElementById('service-area-display');
+
+        serviceAreaSlider.addEventListener('input', function() {
+            serviceAreaDisplay.textContent = this.value + ' miles';
+        });
+
+        // Handle type toggle
+        function updateProviderType(type) {
+            providerTypeHidden.value = type;
+
+            if (type === 'business') {
+                businessOnlyFields.forEach(el => el.classList.remove('hidden'));
+                individualOnlyFields.forEach(el => el.classList.add('hidden'));
+                businessNameInput.required = true;
+                businessIndustrySelect.required = true;
+                submitBtn.textContent = 'Submit Business';
+            } else {
+                businessOnlyFields.forEach(el => el.classList.add('hidden'));
+                individualOnlyFields.forEach(el => el.classList.remove('hidden'));
+                businessNameInput.required = false;
+                businessIndustrySelect.required = false;
+                submitBtn.textContent = 'Join as Tasker';
+            }
+        }
+
+        typeBusiness.addEventListener('change', () => updateProviderType('business'));
+        typeIndividual.addEventListener('change', () => updateProviderType('individual'));
+
+        // Skill chip selection
+        document.querySelectorAll('.skill-chip').forEach(chip => {
+            chip.addEventListener('click', function(e) {
+                if (e.target.tagName !== 'INPUT') {
+                    const checkbox = this.querySelector('input');
+                    checkbox.checked = !checkbox.checked;
+                }
+                this.classList.toggle('selected', this.querySelector('input').checked);
+            });
+
+            // Initialize state
+            const checkbox = chip.querySelector('input');
+            if (checkbox.checked) {
+                chip.classList.add('selected');
+            }
+        });
+
+        // Fetch and display counter
         async function loadBusinessCounter() {
             try {
                 const response = await fetch('/v1/businesses/counter');
@@ -342,24 +812,19 @@
             } catch (error) {
                 console.error('Failed to load counter:', error);
                 counterBanner.innerHTML = `
-                    <h2>🚀 Be a Founding Business</h2>
-                    <div class="counter-message">Join the growing community of Muslim-owned businesses</div>
+                    <h2>Join Our Growing Community</h2>
+                    <div class="counter-message">Connect with Muslims seeking your services</div>
                 `;
             }
         }
 
-        // Load counter on page load
         loadBusinessCounter();
 
-        // Phone formatting function
+        // Phone formatting
         function formatPhoneInput(input) {
-            // Get only digits
             let value = input.value.replace(/\D/g, '');
-
-            // Limit to 10 digits
             value = value.substring(0, 10);
 
-            // Format as (XXX) XXX-XXXX
             if (value.length <= 3) {
                 input.value = value;
             } else if (value.length <= 6) {
@@ -369,9 +834,7 @@
             }
         }
 
-        // Apply phone formatting to all phone inputs
-        const phoneInputs = document.querySelectorAll('input[type="tel"]');
-        phoneInputs.forEach(input => {
+        document.querySelectorAll('input[type="tel"]').forEach(input => {
             input.addEventListener('input', function() {
                 formatPhoneInput(this);
             });
@@ -384,46 +847,79 @@
 
         industrySelect.addEventListener('change', function() {
             if (this.value === 'Other') {
-                otherIndustryGroup.style.display = 'block';
+                otherIndustryGroup.classList.remove('hidden');
                 otherIndustryInput.required = true;
             } else {
-                otherIndustryGroup.style.display = 'none';
+                otherIndustryGroup.classList.add('hidden');
                 otherIndustryInput.required = false;
-                otherIndustryInput.value = '';  // Clear the field when hidden
+                otherIndustryInput.value = '';
             }
         });
 
+        // Form submission
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            // Disable submit button
+            // Validate at least one skill selected
+            const selectedSkills = form.querySelectorAll('input[name="skills"]:checked');
+            if (selectedSkills.length === 0) {
+                errorMsg.textContent = 'Please select at least one skill or service you offer.';
+                errorMsg.style.display = 'block';
+                document.getElementById('skills-container').scrollIntoView({ behavior: 'smooth' });
+                return;
+            }
+
             submitBtn.disabled = true;
             submitBtn.textContent = 'Submitting...';
 
-            // Hide previous messages
             successMsg.style.display = 'none';
             errorMsg.style.display = 'none';
 
-            // Get form data
             const formData = new FormData(form);
+            const providerType = formData.get('provider_type');
+
+            // Collect selected skills
+            const skills = [];
+            selectedSkills.forEach(cb => skills.push(cb.value));
+
+            // Collect availability
+            const availability = [];
+            form.querySelectorAll('input[name="availability"]:checked').forEach(cb => {
+                availability.push(cb.value);
+            });
+
             const data = {
+                provider_type: providerType,
                 owner_name: formData.get('owner_name'),
                 owner_email: formData.get('owner_email'),
                 owner_phone: formData.get('owner_phone') || null,
-                business_name: formData.get('business_name'),
+                business_whatsapp: formData.get('business_whatsapp') || null,
                 business_city: formData.get('business_city'),
                 business_state: formData.get('business_state').toUpperCase(),
-                business_street_address: formData.get('business_street_address') || null,
                 business_zip: formData.get('business_zip') || null,
-                business_industry: formData.get('business_industry') || null,
-                business_industry_other: formData.get('business_industry_other') || null,
-                business_website: formData.get('business_website') || null,
-                business_phone: formData.get('business_phone') || null,
-                business_whatsapp: formData.get('business_whatsapp') || null,
+                service_area_miles: parseInt(formData.get('service_area_miles')) || 25,
+                skills: skills,
                 business_description: formData.get('business_description') || null,
                 muslim_owned: formData.get('muslim_owned') === 'on',
-                submitted_from: 'web'
+                submitted_from: 'claim_portal'
             };
+
+            // Add business-specific fields
+            if (providerType === 'business') {
+                data.business_name = formData.get('business_name');
+                data.business_street_address = formData.get('business_street_address') || null;
+                data.business_website = formData.get('business_website') || null;
+                data.business_industry = formData.get('business_industry') || null;
+                data.business_industry_other = formData.get('business_industry_other') || null;
+            }
+
+            // Add individual-specific fields
+            if (providerType === 'individual') {
+                data.display_name = formData.get('display_name') || null;
+                data.hourly_rate_min = formData.get('hourly_rate_min') ? parseInt(formData.get('hourly_rate_min')) : null;
+                data.hourly_rate_max = formData.get('hourly_rate_max') ? parseInt(formData.get('hourly_rate_max')) : null;
+                data.availability = availability;
+            }
 
             try {
                 const response = await fetch('/v1/businesses/claim', {
@@ -439,23 +935,26 @@
                     throw new Error(error.detail || 'Submission failed');
                 }
 
-                // Success!
                 successMsg.style.display = 'block';
                 form.reset();
 
-                // Hide the "Other" industry field after reset
-                otherIndustryGroup.style.display = 'none';
-                otherIndustryInput.required = false;
+                // Reset UI state
+                updateProviderType('business');
+                typeBusiness.checked = true;
+                document.querySelectorAll('.skill-chip').forEach(chip => {
+                    chip.classList.remove('selected');
+                });
+                otherIndustryGroup.classList.add('hidden');
+                serviceAreaDisplay.textContent = '25 miles';
 
-                // Scroll to top
                 window.scrollTo({ top: 0, behavior: 'smooth' });
 
             } catch (error) {
-                errorMsg.textContent = '✗ ' + error.message;
+                errorMsg.textContent = error.message;
                 errorMsg.style.display = 'block';
             } finally {
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Submit Business';
+                submitBtn.textContent = providerType === 'business' ? 'Submit Business' : 'Join as Tasker';
             }
         });
     </script>
