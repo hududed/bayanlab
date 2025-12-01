@@ -985,11 +985,12 @@ async def get_business_counter(
     Goal doubles automatically: 100 → 250 → 500 → 1000...
     """
     try:
-        # Count all user-submitted claims (claim_portal + admin_manual)
+        # Count only APPROVED claims (not pending/rejected)
         count_query = """
             SELECT COUNT(*) as count
             FROM business_claim_submissions
             WHERE submitted_from IN ('claim_portal', 'admin_manual')
+            AND status = 'approved'
         """
 
         result = await db.execute(text(count_query))
