@@ -66,21 +66,36 @@ def normalize_phone(phone: Optional[str]) -> Optional[str]:
 
 # Pydantic models for business claim
 class BusinessClaimRequest(BaseModel):
-    owner_name: str
+    # Provider type: 'business' or 'individual'
+    provider_type: str = "business"
+
+    # Owner/Provider info
+    owner_name: Optional[str] = None  # Required for business, optional for individual
     owner_email: EmailStr
     owner_phone: Optional[str] = None
-    business_name: str
+
+    # Business fields (required when provider_type='business')
+    business_name: Optional[str] = None
     business_city: str
     business_state: str
     business_street_address: Optional[str] = None
     business_zip: Optional[str] = None
     business_industry: Optional[str] = None
-    business_industry_other: Optional[str] = None  # NEW: Specify industry if "Other"
+    business_industry_other: Optional[str] = None
     business_website: Optional[str] = None
     business_phone: Optional[str] = None
     business_whatsapp: Optional[str] = None
     business_description: Optional[str] = None
     muslim_owned: bool = False
+
+    # Individual/Tasker fields (used when provider_type='individual')
+    display_name: Optional[str] = None
+    skills: Optional[List[str]] = None  # Array of skill tags
+    service_area_miles: Optional[int] = None  # Service radius
+    hourly_rate_min: Optional[float] = None
+    hourly_rate_max: Optional[float] = None
+    availability: Optional[List[str]] = None  # ['weekday_morning', 'weekend_afternoon', etc.]
+
     submitted_from: str = "claim_portal"
 
 
@@ -774,10 +789,29 @@ async def submit_business_claim(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Submit a business claim/registration
-    Allows business owners to add their business to the directory
+    Submit a business or individual provider registration.
+    Supports both business owners and individual service providers (taskers).
     """
     try:
+        # Validate provider type
+        if claim.provider_type not in ('business', 'individual'):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid provider_type. Must be 'business' or 'individual'."
+            )
+
+        # Validate required fields based on provider type
+        if claim.provider_type == 'business':
+            if not claim.business_name:
+                raise HTTPException(status_code=400, detail="Business name is required for business registrations.")
+            if not claim.owner_name:
+                raise HTTPException(status_code=400, detail="Owner name is required for business registrations.")
+        else:  # individual
+            if not claim.display_name:
+                raise HTTPException(status_code=400, detail="Display name is required for individual registrations.")
+            if not claim.skills or len(claim.skills) == 0:
+                raise HTTPException(status_code=400, detail="At least one skill is required for individual registrations.")
+
         # Validate phone numbers before processing
         normalized_owner_phone = normalize_phone(claim.owner_phone)
         normalized_business_phone = normalize_phone(claim.business_phone)
@@ -803,28 +837,37 @@ async def submit_business_claim(
         # Insert claim into database
         insert_query = text("""
             INSERT INTO business_claim_submissions (
+                provider_type,
                 owner_name, owner_email, owner_phone,
                 business_name, business_city, business_state,
                 business_street_address, business_zip,
                 business_industry, business_industry_other, business_website,
                 business_phone, business_whatsapp,
                 business_description,
-                muslim_owned, submitted_from, submitted_at, status
+                muslim_owned,
+                display_name, skills, service_area_miles,
+                hourly_rate_min, hourly_rate_max, availability,
+                submitted_from, submitted_at, status
             )
             VALUES (
+                :provider_type,
                 :owner_name, :owner_email, :owner_phone,
                 :business_name, :business_city, :business_state,
                 :business_street_address, :business_zip,
                 :business_industry, :business_industry_other, :business_website,
                 :business_phone, :business_whatsapp,
                 :business_description,
-                :muslim_owned, :submitted_from, NOW(), 'pending'
+                :muslim_owned,
+                :display_name, :skills, :service_area_miles,
+                :hourly_rate_min, :hourly_rate_max, :availability,
+                :submitted_from, NOW(), 'pending'
             )
             RETURNING claim_id, short_claim_id
         """)
 
         # Insert with already-normalized phone numbers
         result = await db.execute(insert_query, {
+            'provider_type': claim.provider_type,
             'owner_name': claim.owner_name,
             'owner_email': claim.owner_email,
             'owner_phone': normalized_owner_phone,
@@ -840,6 +883,12 @@ async def submit_business_claim(
             'business_whatsapp': normalized_business_whatsapp,
             'business_description': claim.business_description,
             'muslim_owned': claim.muslim_owned,
+            'display_name': claim.display_name,
+            'skills': claim.skills,
+            'service_area_miles': claim.service_area_miles,
+            'hourly_rate_min': claim.hourly_rate_min,
+            'hourly_rate_max': claim.hourly_rate_max,
+            'availability': claim.availability,
             'submitted_from': claim.submitted_from
         })
 
@@ -849,15 +898,19 @@ async def submit_business_claim(
         claim_id = row[0]
         short_claim_id = row[1]
 
-        logger.info(f"Business claim submitted: {short_claim_id} ({claim_id}) - {claim.business_name} by {claim.owner_email}")
+        # Determine name for logging/emails based on provider type
+        provider_name = claim.display_name if claim.provider_type == 'individual' else claim.business_name
+        contact_name = claim.display_name if claim.provider_type == 'individual' else claim.owner_name
+
+        logger.info(f"Provider claim submitted: {short_claim_id} ({claim_id}) - {provider_name} [{claim.provider_type}] by {claim.owner_email}")
 
         # Send confirmation email (non-blocking - don't fail if email fails)
         email_sent = False
         try:
             email_sent = await email_service.send_claim_confirmation(
                 to_email=claim.owner_email,
-                owner_name=claim.owner_name,
-                business_name=claim.business_name,
+                owner_name=contact_name,
+                business_name=provider_name,
                 claim_id=short_claim_id
             )
 
@@ -879,8 +932,8 @@ async def submit_business_claim(
         # Send admin notification (non-blocking - don't fail if email fails)
         try:
             await email_service.send_admin_notification(
-                business_name=claim.business_name,
-                owner_name=claim.owner_name,
+                business_name=provider_name,
+                owner_name=contact_name,
                 owner_email=claim.owner_email,
                 city=claim.business_city,
                 state=claim.business_state,
@@ -890,9 +943,15 @@ async def submit_business_claim(
             logger.error(f"Failed to send admin notification: {admin_email_error}")
             # Continue anyway - don't fail the claim submission if admin email fails
 
+        # Return appropriate message based on provider type
+        if claim.provider_type == 'individual':
+            message = "Thank you! Your service provider profile has been submitted for review."
+        else:
+            message = "Thank you! Your business has been submitted for review."
+
         return BusinessClaimResponse(
             claim_id=short_claim_id,
-            message="Thank you! Your business has been submitted for review."
+            message=message
         )
 
     except HTTPException:

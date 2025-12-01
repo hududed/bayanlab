@@ -453,4 +453,222 @@ UPDATE business_canonical SET submitted_from = 'scraper' WHERE submitted_from LI
 
 ---
 
+## ADR-022: BayanLab API Pricing Tiers
+**Date:** Dec 2025 | **Status:** Proposed
+
+**Context:** BayanLab has grown to ~5K records across masajid, halal eateries, halal markets, and businesses. Need to formalize API access tiers for external consumers.
+
+**Decision:** Simplified tier structure appropriate for current scale:
+
+| Tier | Price | Rate Limit | Access |
+|------|-------|------------|--------|
+| FREE | $0 | 10/min | `/v1/stats`, `/v1/coverage` only |
+| STARTER | $49/mo | 30/min | 1 dataset, 1K calls/month |
+| PRO | $149/mo | 60/min | All datasets, 10K calls/month |
+| ENTERPRISE | Custom | Custom | Dedicated support, SLA |
+
+**Implementation:**
+- Rate limiting via `slowapi` (application-level)
+- Cloudflare Free tier for DDoS/SSL (no premium needed at this scale)
+- API key lookup determines tier
+- Usage tracking in database
+
+**Consequences:**
+✅ Simple pricing for small scale
+✅ No Cloudflare premium cost
+✅ Room to grow into Enigma-style credit system later
+❌ Application-level rate limiting (edge limiting would be more robust at scale)
+
+---
+
+## ADR-023: Unified Provider Registration (Business + Gig Worker)
+**Date:** Dec 2025 | **Status:** In Design
+
+**Context:** ProWasl is pivoting to TaskRabbit-style marketplace combining:
+1. **Businesses** - Have location, brand, employees (fed from BayanLab)
+2. **Gig Workers** - Individuals offering services, no business entity
+
+**Decision:** Single form with type toggle at `claim.prowasl.com`:
+- Toggle: "I'm a Business" vs "I'm an Individual/Tasker"
+- Shared fields adapt based on selection
+- Both go to ProWasl (Supabase), businesses also sync from BayanLab
+
+---
+
+### Task/Skill Taxonomy (TaskRabbit-inspired + Muslim-specific)
+
+**Assembly**
+- General furniture assembly
+- IKEA assembly
+- Crib assembly
+- Bookshelf assembly
+- Desk assembly
+
+**Mounting**
+- Hang art, mirror & decor
+- Blinds & window treatments
+- Mount & anchor furniture
+- Install shelves, rods & hooks
+- TV mounting
+
+**Moving**
+- Help moving
+- Trash & furniture removal
+- Heavy lift & loading
+- Rearrange furniture
+- Junk haul away
+
+**Cleaning**
+- General cleaning
+- Spring cleaning
+- Apartment cleaning
+- Deep clean
+- Garage cleaning
+- Move out clean
+
+**Outdoor Help**
+- Yard work
+- Lawn care
+- Gutter cleaning
+- Leaf raking & removal
+- Landscaping
+- Branch & hedge trimming
+
+**Home Repairs**
+- Door, cabinet & furniture repair
+- Wall repair
+- Sealing & caulking
+- Appliance install & repairs
+- Window & blinds repair
+- Flooring & tiling help
+- Electrical help ⚠️
+- Plumbing help ⚠️
+- Light carpentry
+
+**Painting**
+- Indoor painting
+- Outdoor painting
+- Concrete & brick painting
+- Accent wall painting
+- Wallpaper removal
+- Wallpapering
+
+**Trending/General**
+- Personal assistant
+- Donation drop off
+- Errand running
+- Waiting in line
+- General help
+
+---
+
+### Muslim-Specific Categories
+
+**Islamic Education**
+- Quran classes (tajweed, hifz, tafsir)
+- Arabic language classes
+- Hadith studies
+- Fiqh/Islamic jurisprudence
+- Islamic history
+- Children's Islamic education
+
+**Halal Food Services**
+- Deep freezer meat storage
+- Halal meat pickup/delivery
+- Halal catering
+- Zabiha slaughter services
+- Halal certification consulting
+
+**Modest Fashion & Tailoring**
+- Hijab styling/alterations
+- Modest women's clothing
+- Abaya/thobe tailoring
+- Wedding dress modifications
+- Custom modest wear
+
+**Islamic Events**
+- Nikah planning
+- Walima catering
+- Aqeeqah services
+- Islamic event photography
+- Halal event venues
+- Islamic calligraphy/decor
+
+---
+
+### Licensing/Compliance Concerns ⚠️
+
+**Requires License (varies by state):**
+- Electrical work (licensed electrician)
+- Plumbing (licensed plumber)
+- HVAC (licensed technician)
+- General contracting (over $X threshold)
+- Real estate (licensed agent)
+- Legal services (bar admission)
+- Medical/healthcare (licensed practitioner)
+- Childcare (background check, certification)
+
+**Proposed Handling:**
+1. **Disclaimer on form:** "Some services may require professional licensing in your state. By registering, you confirm you have appropriate credentials."
+2. **Badge system:** `verified_licensed` field for professionals who submit proof
+3. **Category flags:** Mark categories requiring typical licensing
+4. **Future:** Integration with state licensing databases (Phase 2)
+
+**Risk mitigation:** ProWasl is a marketplace connecting people, not the service provider. Similar to TaskRabbit's model - we facilitate, taskers are responsible for compliance.
+
+---
+
+### Form Design: Type Toggle
+
+**Shared Fields (both types):**
+- Name, email, phone, WhatsApp
+- City, state, ZIP
+- Service area (radius in miles)
+- Skills/services offered (multi-select from taxonomy)
+- Description/about
+- Muslim checkbox
+
+**Business-only Fields:**
+- Business name
+- Street address
+- Website
+- Industry (existing dropdown)
+
+**Individual/Tasker-only Fields:**
+- Display name (first name for TaskRabbit style)
+- Hourly rate range (optional)
+- Availability (weekdays/weekends/evenings)
+
+---
+
+### Data Flow
+
+```
+claim.prowasl.com (unified form)
+         │
+         ├── type="business" ──────────────────┐
+         │   └─► BayanLab business_claim_submissions
+         │       └─► (after approval) business_canonical
+         │           └─► ProWasl provider_listings (via sync)
+         │
+         └── type="individual" ────────────────┐
+             └─► ProWasl provider_listings (direct, Supabase)
+```
+
+**Key insight:** Gig workers bypass BayanLab entirely. BayanLab is for aggregated/scraped business data. Self-registered taskers go straight to ProWasl.
+
+---
+
+### Next Steps
+- [ ] Update claim.html with type toggle
+- [ ] Add new fields to business_claim_submissions (service_area, skills)
+- [ ] Create ProWasl Supabase table for direct tasker registration
+- [ ] Implement skills multi-select UI with taxonomy
+- [ ] Add licensing disclaimer
+- [ ] Design badge/verification system
+
+**See Also:** [recategorize-listings.ts](../../prowasl/scripts/recategorize-listings.ts) for existing category regex patterns
+
+---
+
 **Maintained by:** BayanLab Engineering
