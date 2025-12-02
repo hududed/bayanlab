@@ -453,31 +453,57 @@ UPDATE business_canonical SET submitted_from = 'scraper' WHERE submitted_from LI
 
 ---
 
-## ADR-022: BayanLab API Pricing Tiers
-**Date:** Dec 2025 | **Status:** Proposed
+## ADR-022: BayanLab API Pricing - One-Time License Model
+**Date:** Dec 2025 | **Status:** Accepted
 
-**Context:** BayanLab has grown to ~5K records across masajid, halal eateries, halal markets, and businesses. Need to formalize API access tiers for external consumers.
+**Context:** BayanLab has ~5K records across 4 datasets. At this scale, subscription pricing doesn't make sense - a $19/month subscriber could download all data in one API call and cancel. Need a pricing model appropriate for small, high-value datasets.
 
-**Decision:** Simplified tier structure appropriate for current scale:
+**Decision:** One-time data license model (not subscription):
 
-| Tier | Price | Rate Limit | Access |
-|------|-------|------------|--------|
-| FREE | $0 | 10/min | `/v1/stats`, `/v1/coverage` only |
-| STARTER | $49/mo | 30/min | 1 dataset, 1K calls/month |
-| PRO | $149/mo | 60/min | All datasets, 10K calls/month |
-| ENTERPRISE | Custom | Custom | Dedicated support, SLA |
+| Tier | Price | Access | Updates |
+|------|-------|--------|---------|
+| FREE | $0 | `/v1/stats`, `/v1/coverage`, `/v1/preview` only | N/A |
+| DEVELOPER | $99 one-time | 1 dataset of choice | 1 year |
+| COMPLETE | $249 one-time | All 4 datasets | 1 year |
+| ENTERPRISE | Custom | Bulk export, support, SLA | Custom |
+
+### Datasets Available
+
+| Dataset | Records | Use Case |
+|---------|---------|----------|
+| Masajid | ~2,600 | Prayer apps, Islamic center locators |
+| Halal Eateries | ~950 | Halal food finders |
+| Halal Markets | ~210 | Grocery locators |
+| Businesses | ~30+ | Muslim business directories |
+
+### Why One-Time vs Subscription
+
+- **Small dataset problem:** 5K records can be downloaded in one API call
+- **Subscription exploitation:** $19/mo lets someone grab everything and cancel
+- **Value-based pricing:** Data has intrinsic value, not just access value
+- **Natural upgrade path:** 2+ datasets at $99 each → just buy $249 Complete
+
+### FREE Tier Endpoints (Public)
+
+```
+GET /v1/stats          → Aggregate counts only
+GET /v1/coverage       → Regions with data + counts per region
+GET /v1/preview        → Sample listings (name + city only, no contact info)
+```
 
 **Implementation:**
-- Rate limiting via `slowapi` (application-level)
-- Cloudflare Free tier for DDoS/SSL (no premium needed at this scale)
-- API key lookup determines tier
-- Usage tracking in database
+- Rate limiting via `slowapi` (10/min for free endpoints)
+- API key issued after one-time payment
+- Key includes `tier` and `datasets` fields for access control
+- `expires_at` field for 1-year update window
 
 **Consequences:**
-✅ Simple pricing for small scale
-✅ No Cloudflare premium cost
-✅ Room to grow into Enigma-style credit system later
-❌ Application-level rate limiting (edge limiting would be more robust at scale)
+✅ Appropriate pricing for small, valuable datasets
+✅ No subscription churn problem
+✅ Clear value proposition per dataset
+✅ Enterprise tier for data resellers/bulk needs
+❌ Requires payment integration for one-time purchases
+❌ Must handle key expiry and renewal flows
 
 ---
 

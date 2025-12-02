@@ -542,18 +542,20 @@ async def get_stats(
     Use this for directory landing pages showing "X masajid, Y eateries, etc."
     """
     try:
-        # Query counts from all tables (only verified/validated records)
+        # Query counts from all tables
+        # Note: BayanLab shows ALL data (verified + unverified) to potential buyers
+        # Only /v1/businesses/sync filters to verified=TRUE for ProWasl
         masajid_result = await db.execute(text(
-            "SELECT COUNT(*) FROM masajid WHERE verification_status = 'verified'"
+            "SELECT COUNT(*) FROM masajid"
         ))
         eateries_result = await db.execute(text(
-            "SELECT COUNT(*) FROM halal_eateries WHERE halal_status = 'validated'"
+            "SELECT COUNT(*) FROM halal_eateries"
         ))
         markets_result = await db.execute(text(
-            "SELECT COUNT(*) FROM halal_markets WHERE halal_status = 'validated'"
+            "SELECT COUNT(*) FROM halal_markets"
         ))
         businesses_result = await db.execute(text(
-            "SELECT COUNT(*) FROM business_canonical WHERE verified = TRUE"
+            "SELECT COUNT(*) FROM business_canonical"
         ))
 
         masajid_count = masajid_result.scalar() or 0
@@ -588,28 +590,29 @@ async def get_coverage(
     """
     try:
         # Get counts by region for each table
+        # Note: BayanLab shows ALL data (verified + unverified) to potential buyers
         masajid_by_region = await db.execute(text("""
             SELECT address_state, COUNT(*)
             FROM masajid
-            WHERE verification_status = 'verified' AND address_state IS NOT NULL
+            WHERE address_state IS NOT NULL
             GROUP BY address_state
         """))
         eateries_by_region = await db.execute(text("""
             SELECT address_state, COUNT(*)
             FROM halal_eateries
-            WHERE halal_status = 'validated' AND address_state IS NOT NULL
+            WHERE address_state IS NOT NULL
             GROUP BY address_state
         """))
         markets_by_region = await db.execute(text("""
             SELECT address_state, COUNT(*)
             FROM halal_markets
-            WHERE halal_status = 'validated' AND address_state IS NOT NULL
+            WHERE address_state IS NOT NULL
             GROUP BY address_state
         """))
         businesses_by_region = await db.execute(text("""
             SELECT address_state, COUNT(*)
             FROM business_canonical
-            WHERE verified = TRUE AND address_state IS NOT NULL
+            WHERE address_state IS NOT NULL
             GROUP BY address_state
         """))
 
@@ -689,11 +692,11 @@ async def get_preview(
         }
         total = 0
 
-        # Sample masajid
+        # Sample masajid (all records, not just verified)
         masajid_result = await db.execute(text("""
             SELECT name, address_city, address_state
             FROM masajid
-            WHERE verification_status = 'verified' AND address_state = :region
+            WHERE address_state = :region
             ORDER BY name
             LIMIT :limit
         """), {"region": region, "limit": limit})
@@ -706,7 +709,7 @@ async def get_preview(
         eateries_result = await db.execute(text("""
             SELECT name, address_city, address_state
             FROM halal_eateries
-            WHERE halal_status = 'validated' AND address_state = :region
+            WHERE address_state = :region
             ORDER BY name
             LIMIT :limit
         """), {"region": region, "limit": limit})
@@ -719,7 +722,7 @@ async def get_preview(
         markets_result = await db.execute(text("""
             SELECT name, address_city, address_state
             FROM halal_markets
-            WHERE halal_status = 'validated' AND address_state = :region
+            WHERE address_state = :region
             ORDER BY name
             LIMIT :limit
         """), {"region": region, "limit": limit})
@@ -728,11 +731,11 @@ async def get_preview(
                 name=row[0], city=row[1] or '', state=row[2] or region, category='market'
             ))
 
-        # Sample businesses
+        # Sample businesses (all records, not just verified)
         businesses_result = await db.execute(text("""
             SELECT name, address_city, address_state
             FROM business_canonical
-            WHERE verified = TRUE AND address_state = :region
+            WHERE address_state = :region
             ORDER BY name
             LIMIT :limit
         """), {"region": region, "limit": limit})
@@ -741,13 +744,13 @@ async def get_preview(
                 name=row[0], city=row[1] or '', state=row[2] or region, category='business'
             ))
 
-        # Get total count for region
+        # Get total count for region (all records)
         count_result = await db.execute(text("""
             SELECT
-                (SELECT COUNT(*) FROM masajid WHERE verification_status = 'verified' AND address_state = :region) +
-                (SELECT COUNT(*) FROM halal_eateries WHERE halal_status = 'validated' AND address_state = :region) +
-                (SELECT COUNT(*) FROM halal_markets WHERE halal_status = 'validated' AND address_state = :region) +
-                (SELECT COUNT(*) FROM business_canonical WHERE verified = TRUE AND address_state = :region)
+                (SELECT COUNT(*) FROM masajid WHERE address_state = :region) +
+                (SELECT COUNT(*) FROM halal_eateries WHERE address_state = :region) +
+                (SELECT COUNT(*) FROM halal_markets WHERE address_state = :region) +
+                (SELECT COUNT(*) FROM business_canonical WHERE address_state = :region)
         """), {"region": region})
         total = count_result.scalar() or 0
 
