@@ -39,9 +39,6 @@ class Settings(BaseSettings):
     # Neon database (production)
     neon_db_url: str | None = None
 
-    # ProWasl API integration
-    prowasl_api_key: str | None = None
-
     # SendGrid Email
     sendgrid_api_key: str | None = None
     sendgrid_from_email: str = "info@prowasl.com"

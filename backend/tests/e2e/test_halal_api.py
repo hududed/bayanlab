@@ -15,7 +15,7 @@ from typing import Generator
 
 # Test against localhost by default, can override with env var
 BASE_URL = os.getenv("TEST_API_URL", "http://127.0.0.1:8100")
-VALID_API_KEY = os.getenv("PROWASL_API_KEY", "")  # Set this to test full access
+VALID_API_KEY = os.getenv("TEST_API_KEY", "")  # Set this to test full access (use any valid bl_* key)
 
 
 @pytest.fixture(scope="module")
