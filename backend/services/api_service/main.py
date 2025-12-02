@@ -2580,10 +2580,10 @@ async def create_api_key(
     Requires internal API key for authentication.
     """
     try:
-        # Verify internal API key
-        internal_key = request.headers.get("X-Internal-Key")
-        if not internal_key or internal_key != settings.internal_api_key:
-            raise HTTPException(status_code=401, detail="Invalid internal key")
+        # Verify admin API key (used by bayanlab-web webhook after Stripe payment)
+        admin_key = request.headers.get("X-Admin-Key")
+        if not admin_key or admin_key != settings.admin_api_key:
+            raise HTTPException(status_code=401, detail="Invalid admin key")
 
         # Generate new API key
         raw_key, key_hash, key_prefix = generate_api_key()
