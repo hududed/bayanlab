@@ -23,10 +23,89 @@ from ..common.logger import get_logger
 from ..common.models import EventsResponse, BusinessesResponse, MetricsResponse, EventAPI, BusinessAPI, Address, Venue, Organizer
 from .email_service import email_service
 import re
+import hashlib
+import secrets
 import phonenumbers
 from phonenumbers import NumberParseException
 
 settings = get_settings()
+
+
+# API Key validation helper
+async def validate_api_key(
+    api_key: str,
+    db: AsyncSession,
+    required_dataset: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """
+    Validate an API key against the database.
+
+    Returns key info dict if valid, None if invalid.
+    Also updates last_used_at and request_count.
+
+    All API keys are now stored in the api_keys table with proper hashing.
+    """
+    if not api_key:
+        return None
+
+    # Hash the key for database lookup
+    key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+
+    result = await db.execute(text("""
+        SELECT key_id, email, tier, datasets, expires_at, is_active
+        FROM api_keys
+        WHERE api_key = :key_hash
+    """), {"key_hash": key_hash})
+
+    row = result.fetchone()
+    if not row:
+        return None
+
+    key_id, email, tier, datasets, expires_at, is_active = row
+
+    # Check if active and not expired
+    if not is_active:
+        return None
+
+    if expires_at and expires_at < datetime.now(timezone.utc):
+        return None
+
+    # Check dataset access if required
+    if required_dataset and required_dataset not in datasets:
+        return None
+
+    # Update usage stats (fire and forget)
+    await db.execute(text("""
+        UPDATE api_keys
+        SET last_used_at = NOW(), request_count = request_count + 1
+        WHERE key_id = :key_id
+    """), {"key_id": key_id})
+    await db.commit()
+
+    return {
+        "key_id": str(key_id),
+        "tier": tier,
+        "datasets": datasets,
+        "email": email,
+        "is_legacy": False
+    }
+
+
+def generate_api_key() -> tuple[str, str, str]:
+    """
+    Generate a new API key.
+
+    Returns: (raw_key, key_hash, key_prefix)
+    - raw_key: The key to give to the customer (e.g., "bl_abc123...")
+    - key_hash: SHA256 hash to store in database
+    - key_prefix: First 8 chars for display
+    """
+    raw_key = f"bl_{secrets.token_urlsafe(32)}"
+    key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+    key_prefix = raw_key[:8]
+    return raw_key, key_hash, key_prefix
+
+
 logger = get_logger("api_service")
 
 
@@ -881,13 +960,13 @@ async def get_businesses(
     Requires API key for access.
     """
     try:
-        # Require API key - no demo mode
+        # Validate API key with dataset access check
         api_key = request.headers.get("X-API-Key")
-        expected_key = settings.prowasl_api_key
-        if not api_key or api_key != expected_key:
+        key_info = await validate_api_key(api_key, db, required_dataset="businesses")
+        if not key_info:
             raise HTTPException(
                 status_code=401,
-                detail="API key required. Include X-API-Key header."
+                detail="Invalid or expired API key, or no access to businesses dataset."
             )
 
         # Build query from business_canonical
@@ -1344,17 +1423,12 @@ async def sync_businesses(
     Requires X-API-Key header for authentication.
     """
     try:
-        # Verify API key
+        # Validate API key with dataset access check
         api_key = request.headers.get("X-API-Key")
-        expected_key = settings.prowasl_api_key
-
-        if not expected_key:
-            logger.error("PROWASL_API_KEY not configured in environment")
-            raise HTTPException(status_code=500, detail="Sync endpoint not configured")
-
-        if api_key != expected_key:
+        key_info = await validate_api_key(api_key, db, required_dataset="businesses")
+        if not key_info:
             logger.warning(f"Invalid API key attempt from {get_remote_address(request)}")
-            raise HTTPException(status_code=401, detail="Invalid API key")
+            raise HTTPException(status_code=401, detail="Invalid or expired API key")
 
         # Build query to fetch verified businesses from canonical table
         query = """
@@ -1508,13 +1582,13 @@ async def get_halal_eateries(
     - `favorites_only`: Return only community favorites
     """
     try:
-        # Require API key - no demo mode
+        # Validate API key with dataset access check
         api_key = request.headers.get("X-API-Key")
-        expected_key = settings.prowasl_api_key
-        if not api_key or api_key != expected_key:
+        key_info = await validate_api_key(api_key, db, required_dataset="eateries")
+        if not key_info:
             raise HTTPException(
                 status_code=401,
-                detail="API key required. Include X-API-Key header."
+                detail="Invalid or expired API key, or no access to eateries dataset."
             )
 
         # Build main query
@@ -1599,6 +1673,8 @@ async def get_halal_eateries(
             items=items
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching halal eateries: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -1632,13 +1708,13 @@ async def get_halal_markets(
     - `wholesale`: Wholesale suppliers (e.g., Restaurant Depot)
     """
     try:
-        # Require API key - no demo mode
+        # Validate API key with dataset access check
         api_key = request.headers.get("X-API-Key")
-        expected_key = settings.prowasl_api_key
-        if not api_key or api_key != expected_key:
+        key_info = await validate_api_key(api_key, db, required_dataset="markets")
+        if not key_info:
             raise HTTPException(
                 status_code=401,
-                detail="API key required. Include X-API-Key header."
+                detail="Invalid or expired API key, or no access to markets dataset."
             )
 
         # Build query
@@ -1700,6 +1776,8 @@ async def get_halal_markets(
             items=items
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching halal markets: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -1733,13 +1811,21 @@ async def get_halal_places(
     - `market`: Grocery stores, butchers, wholesale
     """
     try:
-        # Require API key - no demo mode
+        # Validate API key - needs both eateries and markets access
         api_key = request.headers.get("X-API-Key")
-        expected_key = settings.prowasl_api_key
-        if not api_key or api_key != expected_key:
+        key_info = await validate_api_key(api_key, db)
+        if not key_info:
             raise HTTPException(
                 status_code=401,
-                detail="API key required. Include X-API-Key header."
+                detail="Invalid or expired API key."
+            )
+        # Check access to both datasets
+        has_eateries = "eateries" in key_info.get("datasets", [])
+        has_markets = "markets" in key_info.get("datasets", [])
+        if not (has_eateries and has_markets):
+            raise HTTPException(
+                status_code=401,
+                detail="This endpoint requires access to both eateries and markets datasets."
             )
 
         items = []
@@ -1813,6 +1899,8 @@ async def get_halal_places(
             items=items
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching halal places: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -2458,6 +2546,102 @@ async def approve_businesses(
         raise HTTPException(status_code=500, detail="Failed to approve businesses")
 
 
+# ========== API KEY MANAGEMENT ==========
+
+class CreateApiKeyRequest(BaseModel):
+    """Request body for creating a new API key"""
+    email: EmailStr
+    tier: str = "developer"  # 'developer', 'complete', 'enterprise'
+    datasets: List[str] = []  # e.g., ['masajid', 'eateries']
+    stripe_customer_id: Optional[str] = None
+    stripe_payment_id: Optional[str] = None
+
+
+class CreateApiKeyResponse(BaseModel):
+    """Response containing the new API key"""
+    success: bool
+    api_key: str  # The raw key to give to customer
+    key_prefix: str  # For display purposes
+    tier: str
+    datasets: List[str]
+    expires_at: str
+
+
+@app.post("/v1/internal/api-keys", tags=["Internal"])
+async def create_api_key(
+    request: Request,
+    body: CreateApiKeyRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Create a new API key for a customer.
+
+    Called by Stripe webhook after successful payment.
+    Requires internal API key for authentication.
+    """
+    try:
+        # Verify internal API key
+        internal_key = request.headers.get("X-Internal-Key")
+        if not internal_key or internal_key != settings.internal_api_key:
+            raise HTTPException(status_code=401, detail="Invalid internal key")
+
+        # Generate new API key
+        raw_key, key_hash, key_prefix = generate_api_key()
+
+        # Determine datasets based on tier
+        datasets = body.datasets
+        if body.tier == "complete" or body.tier == "enterprise":
+            datasets = ["masajid", "eateries", "markets", "businesses"]
+        elif body.tier == "developer" and not datasets:
+            raise HTTPException(
+                status_code=400,
+                detail="Developer tier requires at least one dataset"
+            )
+
+        # Calculate expiry (1 year from now)
+        from datetime import timedelta
+        expires_at = datetime.now(timezone.utc) + timedelta(days=365)
+
+        # Insert into database
+        await db.execute(text("""
+            INSERT INTO api_keys (
+                api_key, api_key_prefix, email, tier, datasets,
+                stripe_customer_id, stripe_payment_id, expires_at
+            ) VALUES (
+                :key_hash, :key_prefix, :email, :tier, :datasets,
+                :stripe_customer_id, :stripe_payment_id, :expires_at
+            )
+        """), {
+            "key_hash": key_hash,
+            "key_prefix": key_prefix,
+            "email": body.email,
+            "tier": body.tier,
+            "datasets": datasets,
+            "stripe_customer_id": body.stripe_customer_id,
+            "stripe_payment_id": body.stripe_payment_id,
+            "expires_at": expires_at
+        })
+        await db.commit()
+
+        logger.info(f"Created API key for {body.email} (tier={body.tier}, datasets={datasets})")
+
+        return CreateApiKeyResponse(
+            success=True,
+            api_key=raw_key,
+            key_prefix=key_prefix,
+            tier=body.tier,
+            datasets=datasets,
+            expires_at=expires_at.isoformat()
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error creating API key: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create API key")
+
+
 @app.get("/v1/masajid", response_model=MasajidResponse, tags=["Masajid"])
 @limiter.limit("100/minute")
 async def get_masajid(
@@ -2476,13 +2660,13 @@ async def get_masajid(
     **Authentication:** Requires API key via X-API-Key header.
     """
     try:
-        # Require API key - no demo mode
+        # Validate API key with dataset access check
         api_key = request.headers.get("X-API-Key")
-        expected_key = settings.prowasl_api_key
-        if not api_key or api_key != expected_key:
+        key_info = await validate_api_key(api_key, db, required_dataset="masajid")
+        if not key_info:
             raise HTTPException(
                 status_code=401,
-                detail="API key required. Include X-API-Key header."
+                detail="Invalid or expired API key, or no access to masajid dataset."
             )
 
         # Build query - only verified masajid (excludes unverified entries without standalone locations)
@@ -2548,6 +2732,8 @@ async def get_masajid(
             items=items
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching masajid: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
