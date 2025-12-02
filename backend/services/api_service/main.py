@@ -924,21 +924,7 @@ async def get_businesses(
         result = await db.execute(text(query_sql), params)
         rows = result.fetchall()
 
-        # Get total count for pagination
-        count_sql = """
-        SELECT COUNT(*) FROM business_canonical WHERE 1=1
-        """
-        if state:
-            count_sql += " AND address_state = :state"
-        if city:
-            count_sql += " AND LOWER(address_city) = LOWER(:city)"
-        if category:
-            count_sql += " AND category = :category"
-
-        count_result = await db.execute(text(count_sql), params)
-        total_count = count_result.scalar()
-
-        # Build response
+        # Build response (no total count exposed per ADR-024)
         items = []
         for row in rows:
             (business_id, name, category_val, street, city_name, state_val,
@@ -972,13 +958,12 @@ async def get_businesses(
 
         response = {
             "version": "1.0",
-            "total": total_count,
-            "limit": limit,
-            "offset": offset,
+            "state": state,
+            "access_tier": "full",
             "items": items
         }
 
-        logger.info(f"Served {len(items)} businesses (state={state}, total={total_count})")
+        logger.info(f"Served {len(items)} businesses (state={state})")
         return JSONResponse(content=response)
 
     except HTTPException:
