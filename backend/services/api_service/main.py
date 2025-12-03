@@ -1430,37 +1430,74 @@ async def sync_businesses(
             logger.warning(f"Invalid API key attempt from {get_remote_address(request)}")
             raise HTTPException(status_code=401, detail="Invalid or expired API key")
 
-        # Build query to fetch verified businesses from canonical table
+        # Build query to fetch verified businesses from canonical table + CO halal_eateries
         query = """
-            SELECT
-                business_id::text as business_id,
-                name as business_name,
-                category::text as business_industry,
-                NULL::text as business_industry_other,
-                description as business_description,
-                website as business_website,
-                address_street as business_address,
-                address_city as business_city,
-                address_state as business_state,
-                address_zip as business_zip,
-                phone as business_phone,
-                NULL::text as business_whatsapp,
-                latitude,
-                longitude,
-                owner_name,
-                owner_email,
-                owner_phone,
-                muslim_owned,
-                NULL::text as google_place_id,
-                NULL::numeric as google_rating,
-                NULL::int as google_review_count,
-                NULL::jsonb as business_hours,
-                ARRAY[]::text[] as photos,
-                'verified' as status,
-                COALESCE(updated_at, created_at)::text as updated_at
-            FROM business_canonical
-            WHERE verified = TRUE
-            AND (email IS NOT NULL OR phone IS NOT NULL OR owner_email IS NOT NULL OR owner_phone IS NOT NULL)
+            SELECT * FROM (
+                -- Verified businesses from business_canonical
+                SELECT
+                    business_id::text as business_id,
+                    name as business_name,
+                    category::text as business_industry,
+                    NULL::text as business_industry_other,
+                    description as business_description,
+                    website as business_website,
+                    address_street as business_address,
+                    address_city as business_city,
+                    address_state as business_state,
+                    address_zip as business_zip,
+                    phone as business_phone,
+                    NULL::text as business_whatsapp,
+                    latitude,
+                    longitude,
+                    owner_name,
+                    owner_email,
+                    owner_phone,
+                    muslim_owned,
+                    NULL::text as google_place_id,
+                    NULL::numeric as google_rating,
+                    NULL::int as google_review_count,
+                    NULL::jsonb as business_hours,
+                    ARRAY[]::text[] as photos,
+                    'verified' as status,
+                    COALESCE(updated_at, created_at)::text as updated_at
+                FROM business_canonical
+                WHERE verified = TRUE
+                AND (email IS NOT NULL OR phone IS NOT NULL OR owner_email IS NOT NULL OR owner_phone IS NOT NULL)
+
+                UNION ALL
+
+                -- Halal eateries from CO (catering services)
+                SELECT
+                    eatery_id::text as business_id,
+                    name as business_name,
+                    'restaurant' as business_industry,
+                    cuisine_style as business_industry_other,
+                    NULL::text as business_description,
+                    website as business_website,
+                    address_street as business_address,
+                    address_city as business_city,
+                    address_state as business_state,
+                    address_zip as business_zip,
+                    phone as business_phone,
+                    NULL::text as business_whatsapp,
+                    latitude,
+                    longitude,
+                    NULL::varchar as owner_name,
+                    NULL::varchar as owner_email,
+                    NULL::varchar as owner_phone,
+                    TRUE as muslim_owned,
+                    google_place_id,
+                    google_rating,
+                    NULL::int as google_review_count,
+                    NULL::jsonb as business_hours,
+                    ARRAY[]::text[] as photos,
+                    'verified' as status,
+                    COALESCE(updated_at, created_at)::text as updated_at
+                FROM halal_eateries
+                WHERE address_state = 'CO'
+                AND (phone IS NOT NULL OR website IS NOT NULL)
+            ) combined
+            WHERE 1=1
         """
 
         params = {}
@@ -1486,8 +1523,8 @@ async def sync_businesses(
         count_result = await db.execute(text(count_query), params)
         total = count_result.scalar() or 0
 
-        # Add pagination
-        query += " ORDER BY COALESCE(updated_at, created_at) DESC LIMIT :limit OFFSET :offset"
+        # Add pagination (use updated_at which is already computed in subquery)
+        query += " ORDER BY updated_at DESC LIMIT :limit OFFSET :offset"
         params['limit'] = limit
         params['offset'] = offset
 
