@@ -167,6 +167,10 @@ class BusinessClaimRequest(BaseModel):
     business_description: Optional[str] = None
     muslim_owned: bool = False
 
+    # Geolocation (populated by Radar address autocomplete)
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
     # Individual/Tasker fields (used when provider_type='individual')
     display_name: Optional[str] = None
     skills: Optional[List[str]] = None  # Array of skill tags
@@ -1126,12 +1130,25 @@ async def get_metrics(
 @app.get("/claim")
 async def serve_claim_form():
     """
-    Serve the business claim form
+    Serve the business claim form with Radar API key injected
     """
     static_path = Path(__file__).parent / "static" / "claim.html"
     if not static_path.exists():
         raise HTTPException(status_code=404, detail="Claim form not found")
-    return FileResponse(str(static_path))
+
+    # Read the HTML and inject the Radar key
+    with open(static_path, 'r') as f:
+        html_content = f.read()
+
+    # Replace placeholder with actual key from environment
+    radar_key = settings.radar_publishable_key or 'prj_live_pk_REPLACE_WITH_YOUR_KEY'
+    html_content = html_content.replace(
+        "const RADAR_PUBLISHABLE_KEY = 'prj_live_pk_REPLACE_WITH_YOUR_KEY'",
+        f"const RADAR_PUBLISHABLE_KEY = '{radar_key}'"
+    )
+
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(content=html_content)
 
 
 @app.post("/v1/businesses/claim", response_model=BusinessClaimResponse, tags=["Businesses"])
@@ -1198,6 +1215,7 @@ async def submit_business_claim(
                 business_phone, business_whatsapp,
                 business_description,
                 muslim_owned,
+                latitude, longitude,
                 display_name, skills, service_area_miles,
                 hourly_rate_min, hourly_rate_max, availability,
                 submitted_from, submitted_at, status
@@ -1211,6 +1229,7 @@ async def submit_business_claim(
                 :business_phone, :business_whatsapp,
                 :business_description,
                 :muslim_owned,
+                :latitude, :longitude,
                 :display_name, :skills, :service_area_miles,
                 :hourly_rate_min, :hourly_rate_max, :availability,
                 :submitted_from, NOW(), 'pending'
@@ -1236,6 +1255,8 @@ async def submit_business_claim(
             'business_whatsapp': normalized_business_whatsapp,
             'business_description': claim.business_description,
             'muslim_owned': claim.muslim_owned,
+            'latitude': claim.latitude,
+            'longitude': claim.longitude,
             'display_name': claim.display_name,
             'skills': claim.skills,
             'service_area_miles': claim.service_area_miles,

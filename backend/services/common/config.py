@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     internal_api_key: str | None = None  # For team access to validation tool
     admin_api_key: str | None = None  # For admin-only approval operations
 
+    # Radar.io Address Autocomplete
+    radar_publishable_key: str | None = None  # Publishable key - safe for client-side
+    radar_secret_key: str | None = None  # Secret key - server-side only (not currently used)
+
     # Region (default for V1)
     default_region: str = "CO"
 
