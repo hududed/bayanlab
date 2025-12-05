@@ -1142,7 +1142,9 @@ async def serve_claim_form():
 
     # Replace placeholder with actual key from environment
     radar_key = settings.radar_publishable_key or 'prj_live_pk_REPLACE_WITH_YOUR_KEY'
-    logger.info(f"Radar key configured: {bool(settings.radar_publishable_key)}, key starts with: {radar_key[:20] if radar_key else 'None'}...")
+    # Debug: also check os.environ directly
+    env_radar_key = os.environ.get('RADAR_PUBLISHABLE_KEY', 'NOT_SET')
+    logger.info(f"Radar key - settings: {bool(settings.radar_publishable_key)}, os.environ: {env_radar_key[:20] if env_radar_key != 'NOT_SET' else 'NOT_SET'}...")
 
     html_content = html_content.replace(
         "const RADAR_PUBLISHABLE_KEY = 'prj_live_pk_REPLACE_WITH_YOUR_KEY'",
